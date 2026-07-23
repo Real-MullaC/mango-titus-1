@@ -12,5 +12,3 @@ Chris Titus’s mango-titus attempt used **DankMaterialShell (DMS)** here
 | Notifications / clipboard / settings IPC | Quickshell (when dwm-titus shell config is ported) |
 | DMS lock | `swaylock-effects` + `swayidle` (`scripts/lock.sh`, `scripts/idle.sh`) |
 | DMS colors / layout | Quickshell theme + mango `config.conf` appearance |
-
-See `research/packages.md` and `research/packages_study/`.

@@ -8,16 +8,16 @@ pragma ComponentBehavior: Bound
 FloatingWindow {
     id: root
 
-    required property var controlCenterModel
+    required property ControlCenterModel controlCenterModel
 
     readonly property bool isAppearance: controlCenterModel.utilityPage === "appearance"
     readonly property bool isPower: controlCenterModel.utilityPage === "power"
     readonly property bool isListPage: !isAppearance && !isPower
     readonly property int pageIndex: isAppearance ? 0 : (isPower ? 1 : 2)
-    readonly property string pageTitle: controlCenterModel.utilityPage === "keybinds" ? "Keybinds"
-        : controlCenterModel.utilityPage === "appearance" ? "Appearance"
-        : controlCenterModel.utilityPage === "power" ? "Power Settings"
-        : "System Info"
+    readonly property string pageTitle: controlCenterModel.utilityPage === "keybinds" ? qsTr("Keybinds")
+        : controlCenterModel.utilityPage === "appearance" ? qsTr("Appearance")
+        : controlCenterModel.utilityPage === "power" ? qsTr("Power Settings")
+        : qsTr("System Info")
     readonly property var pageRows: controlCenterModel.utilityPage === "keybinds" ? controlCenterModel.keybindRows
         : controlCenterModel.utilityPage === "appearance" ? controlCenterModel.themeRows
         : controlCenterModel.infoRows
@@ -28,7 +28,7 @@ FloatingWindow {
     color: Theme.transparent
     // The prefix keeps this window compatible with preserved user rules that
     // already float the dwm control center by title substring.
-    title: "dwm control center utility"
+    title: qsTr("dwm control center utility")
 
     onVisibleChanged: {
         if (!visible) {
@@ -44,27 +44,48 @@ FloatingWindow {
         property bool tileEnabled: true
         signal activated()
 
+        Accessible.role: Accessible.Button
+        Accessible.name: powerTile.label
+        Accessible.onPressAction: {
+            if (powerTile.tileEnabled)
+                powerTile.activated();
+        }
+        activeFocusOnTab: true
+
         Layout.fillWidth: true
         implicitHeight: 32
-        opacity: tileEnabled ? 1 : 0.45
         radius: Theme.smallRadius
-        color: active ? Theme.surfaceActive : (powerMouse.containsMouse ? Theme.surfaceHover : Theme.surface)
-        border.color: active || powerMouse.containsMouse ? Theme.accentSecondary : Theme.border
+        color: active ? Theme.surfaceActive : (powerHover.hovered ? Theme.surfaceHover : Theme.surface)
+        border.color: !powerTile.tileEnabled ? Theme.border
+            : (active || powerHover.hovered ? Theme.accentSecondary : Theme.border)
         border.width: Theme.pillBorderWidth
+
+        Keys.onPressed: function(event) {
+            if (!powerTile.tileEnabled)
+                return;
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                powerTile.activated();
+                event.accepted = true;
+            }
+        }
+
+        HoverHandler {
+            id: powerHover
+            enabled: powerTile.tileEnabled
+            cursorShape: powerTile.tileEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+
+        TapHandler {
+            enabled: powerTile.tileEnabled
+            acceptedButtons: Qt.LeftButton
+            onTapped: powerTile.activated()
+        }
 
         UiText {
             anchors.centerIn: parent
             text: powerTile.label
-            color: powerTile.active || powerMouse.containsMouse ? Theme.accentSecondary : Theme.text
-        }
-
-        MouseArea {
-            id: powerMouse
-            anchors.fill: parent
-            enabled: powerTile.tileEnabled
-            hoverEnabled: true
-            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: powerTile.activated()
+            color: !powerTile.tileEnabled ? Theme.textMuted
+                : (powerTile.active || powerHover.hovered ? Theme.accentSecondary : Theme.text)
         }
     }
 
@@ -95,7 +116,7 @@ FloatingWindow {
                     elide: Text.ElideRight
                 }
                 ShellButton {
-                    label: "Close"
+                    label: qsTr("Close")
                     onActivated: root.controlCenterModel.closeUtility()
                 }
             }
@@ -124,24 +145,45 @@ FloatingWindow {
                         width: ListView.view ? ListView.view.width : 0
                         height: 36
                         radius: Theme.smallRadius
-                        color: modelData.status === "active" ? Theme.surfaceActive : (themeMouse.containsMouse ? Theme.surfaceHover : Theme.surface)
-                        border.color: modelData.status === "active" || themeMouse.containsMouse ? Theme.accentSecondary : Theme.border
+                        color: root.controlCenterModel.busy ? Theme.surface
+                            : (modelData.status === "active" ? Theme.surfaceActive : (themeHover.hovered ? Theme.surfaceHover : Theme.surface))
+                        border.color: root.controlCenterModel.busy ? Theme.border
+                            : (modelData.status === "active" || themeHover.hovered ? Theme.accentSecondary : Theme.border)
                         border.width: Theme.pillBorderWidth
-                        opacity: root.controlCenterModel.busy ? 0.5 : 1
+
+                        Accessible.role: Accessible.Button
+                        Accessible.name: themeTile.modelData.name
+                        Accessible.onPressAction: {
+                            if (!root.controlCenterModel.busy)
+                                root.controlCenterModel.setTheme(themeTile.modelData.name);
+                        }
+                        activeFocusOnTab: true
+
+                        Keys.onPressed: function(event) {
+                            if (root.controlCenterModel.busy)
+                                return;
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                root.controlCenterModel.setTheme(themeTile.modelData.name);
+                                event.accepted = true;
+                            }
+                        }
+
+                        HoverHandler {
+                            id: themeHover
+                            enabled: !root.controlCenterModel.busy
+                            cursorShape: !root.controlCenterModel.busy ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        }
+
+                        TapHandler {
+                            enabled: !root.controlCenterModel.busy
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: root.controlCenterModel.setTheme(themeTile.modelData.name)
+                        }
 
                         UiText {
                             anchors.centerIn: parent
                             text: (modelData.status === "active" ? "● " : "") + modelData.name
-                            color: modelData.status === "active" || themeMouse.containsMouse ? Theme.accentSecondary : Theme.text
-                        }
-
-                        MouseArea {
-                            id: themeMouse
-                            anchors.fill: parent
-                            enabled: !root.controlCenterModel.busy
-                            hoverEnabled: true
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: root.controlCenterModel.setTheme(modelData.name)
+                            color: modelData.status === "active" || themeHover.hovered ? Theme.accentSecondary : Theme.text
                         }
                     }
 
@@ -150,7 +192,7 @@ FloatingWindow {
                         visible: root.controlCenterModel.themeRows.length === 0
                         text: root.controlCenterModel.message.length > 0
                             ? root.controlCenterModel.message
-                            : "No themes found"
+                            : qsTr("No themes found")
                         color: Theme.textMuted
                     }
                 }
@@ -172,12 +214,12 @@ FloatingWindow {
                         UiText {
                             Layout.fillWidth: true
                             text: root.controlCenterModel.powerLockEnabled
-                                ? "Lock after " + root.controlCenterModel.formatDuration(root.controlCenterModel.powerLockTimeout)
-                                : "Auto lock disabled"
+                                ? qsTr("Lock after %1").arg(root.controlCenterModel.formatDuration(root.controlCenterModel.powerLockTimeout))
+                                : qsTr("Auto lock disabled")
                             color: Theme.textMuted
                         }
                         PowerTile {
-                            label: root.controlCenterModel.powerLockEnabled ? "Disable Auto Lock" : "Enable Auto Lock"
+                            label: root.controlCenterModel.powerLockEnabled ? qsTr("Disable Auto Lock") : qsTr("Enable Auto Lock")
                             active: root.controlCenterModel.powerLockEnabled
                             tileEnabled: root.controlCenterModel.powerLockAvailable && !root.controlCenterModel.busy
                             onActivated: root.controlCenterModel.setPowerLock(!root.controlCenterModel.powerLockEnabled)
@@ -205,12 +247,12 @@ FloatingWindow {
                         UiText {
                             Layout.fillWidth: true
                             text: root.controlCenterModel.powerDpmsEnabled
-                                ? "Monitor sleep after " + root.controlCenterModel.formatDuration(root.controlCenterModel.powerDpmsTimeout)
-                                : "Monitor sleep disabled (default)"
+                                ? qsTr("Monitor sleep after %1").arg(root.controlCenterModel.formatDuration(root.controlCenterModel.powerDpmsTimeout))
+                                : qsTr("Monitor sleep disabled (default)")
                             color: Theme.textMuted
                         }
                         PowerTile {
-                            label: root.controlCenterModel.powerDpmsEnabled ? "Disable Monitor Sleep" : "Enable Monitor Sleep"
+                            label: root.controlCenterModel.powerDpmsEnabled ? qsTr("Disable Monitor Sleep") : qsTr("Enable Monitor Sleep")
                             active: root.controlCenterModel.powerDpmsEnabled
                             tileEnabled: root.controlCenterModel.powerDpmsAvailable && !root.controlCenterModel.busy
                             onActivated: root.controlCenterModel.setPowerDpms(!root.controlCenterModel.powerDpmsEnabled)
@@ -237,8 +279,8 @@ FloatingWindow {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: root.controlCenterModel.powerLockAvailable
-                                ? "Uses swayidle + swaylock. Monitor sleep uses mmsg (opt-in)."
-                                : "Idle helpers unavailable — is mango-titus installed?"
+                                ? qsTr("Uses swayidle + swaylock. Monitor sleep uses mmsg (opt-in).")
+                                : qsTr("Idle helpers unavailable — is mango-titus installed?")
                             color: Theme.textMuted
                             font.pixelSize: Theme.smallFontSize
                         }

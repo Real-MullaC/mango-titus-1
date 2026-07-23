@@ -8,11 +8,12 @@ pragma ComponentBehavior: Bound
 FloatingWindow {
     id: root
 
-    required property var healthModel
+    required property SystemHealthModel healthModel
 
-    title: "dwm system health"
+    title: qsTr("System Health")
     visible: healthModel.visible
-    fullscreen: true
+    // Leave fullscreen while elevating so the mate-polkit password dialog is not covered.
+    fullscreen: visible && !healthModel.systemRunning
     color: Theme.bg
 
     onVisibleChanged: {
@@ -60,7 +61,7 @@ FloatingWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "System Health"
+                        text: qsTr("System Health")
                         color: Theme.textStrong
                         font.family: Theme.fontFamily
                         font.pixelSize: 26
@@ -102,18 +103,24 @@ FloatingWindow {
                 }
 
                 ShellButton {
-                    label: root.healthModel.showIssuesOnly ? "Show All" : "Issues Only"
+                    label: root.healthModel.showIssuesOnly ? qsTr("Show All") : qsTr("Issues Only")
                     onActivated: root.healthModel.showIssuesOnly = !root.healthModel.showIssuesOnly
                 }
 
                 ShellButton {
-                    label: root.healthModel.busy ? "Scanning..." : "Refresh"
+                    label: root.healthModel.busy ? qsTr("Scanning...") : qsTr("Refresh")
                     enabled: !root.healthModel.busy
                     onActivated: root.healthModel.refresh()
                 }
 
                 ShellButton {
-                    label: "Close"
+                    label: root.healthModel.systemRunning ? qsTr("Elevating...") : qsTr("Elevated scan")
+                    enabled: !root.healthModel.busy
+                    onActivated: root.healthModel.refreshElevated()
+                }
+
+                ShellButton {
+                    label: qsTr("Close")
                     onActivated: root.healthModel.close()
                 }
             }
@@ -124,10 +131,10 @@ FloatingWindow {
 
                 Repeater {
                     model: [
-                        { "label": "Errors", "status": "error", "color": Theme.danger },
-                        { "label": "Warnings", "status": "warn", "color": "#ebcb8b" },
-                        { "label": "Restricted", "status": "restricted", "color": "#b48ead" },
-                        { "label": "Passing", "status": "ok", "color": "#a3be8c" }
+                        { "label": qsTr("Errors"), "status": "error", "color": Theme.danger },
+                        { "label": qsTr("Warnings"), "status": "warn", "color": "#ebcb8b" },
+                        { "label": qsTr("Restricted"), "status": "restricted", "color": "#b48ead" },
+                        { "label": qsTr("Passing"), "status": "ok", "color": "#a3be8c" }
                     ]
 
                     Rectangle {
@@ -144,7 +151,7 @@ FloatingWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: statusTile.modelData.label + " " + (
+                            text: qsTr("%1 %2").arg(statusTile.modelData.label).arg(
                                 statusTile.modelData.status === "error" ? root.healthModel.errorCount
                                 : statusTile.modelData.status === "warn" ? root.healthModel.warnCount
                                 : statusTile.modelData.status === "restricted" ? root.healthModel.restrictedCount
@@ -199,12 +206,33 @@ FloatingWindow {
                                 required property var modelData
                                 readonly property int issueCount: root.healthModel.categoryIssueCount(categoryButton.modelData.id)
 
+                                Accessible.role: Accessible.Button
+                                Accessible.name: categoryButton.modelData.label
+                                Accessible.onPressAction: root.healthModel.selectedCategory = categoryButton.modelData.id
+                                activeFocusOnTab: true
+
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 46
                                 color: root.healthModel.selectedCategory === categoryButton.modelData.id ? Theme.surfaceHover : Theme.transparent
                                 border.color: root.healthModel.selectedCategory === categoryButton.modelData.id ? Theme.accent : Theme.transparent
                                 border.width: 1
                                 radius: Theme.radius
+
+                                Keys.onPressed: function(event) {
+                                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                        root.healthModel.selectedCategory = categoryButton.modelData.id;
+                                        event.accepted = true;
+                                    }
+                                }
+
+                                HoverHandler {
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+
+                                TapHandler {
+                                    acceptedButtons: Qt.LeftButton
+                                    onTapped: root.healthModel.selectedCategory = categoryButton.modelData.id
+                                }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -232,12 +260,6 @@ FloatingWindow {
                                         textFormat: Text.PlainText
                                     }
                                 }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.healthModel.selectedCategory = categoryButton.modelData.id
-                                }
                             }
                         }
 
@@ -247,10 +269,11 @@ FloatingWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Current boot only\nNo external network probes"
+                            text: qsTr("Current boot only\nNo external network probes")
                             color: Theme.placeholder
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.tinyFontSize
+                            textFormat: Text.PlainText
                             wrapMode: Text.WordWrap
                         }
                     }
@@ -278,10 +301,11 @@ FloatingWindow {
                     Text {
                         anchors.centerIn: parent
                         visible: healthList.count === 0
-                        text: root.healthModel.busy ? "Collecting system health..." : "No checks match this view"
+                        text: root.healthModel.busy ? qsTr("Collecting system health...") : qsTr("No checks match this view")
                         color: Theme.textMuted
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.bodyFontSize
+                        textFormat: Text.PlainText
                     }
                 }
             }
@@ -309,11 +333,12 @@ FloatingWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Confirm Repair"
+                        text: qsTr("Confirm Repair")
                         color: Theme.textStrong
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.titleFontSize
                         font.bold: true
+                        textFormat: Text.PlainText
                     }
 
                     Text {
@@ -323,6 +348,7 @@ FloatingWindow {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.inputFontSize
                         font.bold: true
+                        textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                     }
 
@@ -333,17 +359,19 @@ FloatingWindow {
                         color: Theme.textMuted
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.bodyFontSize
+                        textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                     }
 
                     Text {
                         Layout.fillWidth: true
                         text: root.healthModel.pendingRepair && root.healthModel.pendingRepair.privilege === "system"
-                            ? "Administrator authorization is required."
-                            : "This action affects only the current user session."
+                            ? qsTr("Administrator authorization is required.")
+                            : qsTr("This action affects only the current user session.")
                         color: root.healthModel.pendingRepair && root.healthModel.pendingRepair.privilege === "system" ? "#ebcb8b" : Theme.textMuted
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.smallFontSize
+                        textFormat: Text.PlainText
                     }
 
                     RowLayout {
@@ -354,12 +382,12 @@ FloatingWindow {
                         }
 
                         ShellButton {
-                            label: "Cancel"
+                            label: qsTr("Cancel")
                             onActivated: root.healthModel.cancelRepair()
                         }
 
                         ShellButton {
-                            label: "Run Repair"
+                            label: qsTr("Run Repair")
                             danger: true
                             onActivated: root.healthModel.confirmRepair()
                         }

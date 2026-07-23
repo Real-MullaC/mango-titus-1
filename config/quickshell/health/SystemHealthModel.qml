@@ -15,25 +15,34 @@ Scope {
     property bool showIssuesOnly: false
     // Suppress "cancelled scan → restricted" when closing/refreshing intentionally.
     property bool suppressScanCancel: false
+    // True once privileged scan emits a terminal meta line (complete or restricted).
+    // Prevents onRunningChanged from clobbering that reason with a generic cancel.
+    property bool privilegedSettled: false
+    // Bumped on each refresh so a killed privileged process cannot settle the next scan.
+    property int systemScanEpoch: 0
+    property int activeSystemScanEpoch: 0
     property string selectedCategory: "overview"
-    property string coverageMessage: "Waiting for privileged scan"
+    property string coverageMessage: qsTr("Waiting for scan")
     property string repairMessage: ""
     property string repairError: ""
     property var rows: []
     property var pendingRepair: null
     property var targetScreen: null
     property var expandedIds: ({})
+    // Optional elevated (pkexec) scan — off by default to avoid password prompts.
+    property bool elevatedAvailable: true
+    property bool elevatedDone: false
 
     readonly property bool busy: root.userRunning || root.systemRunning || root.repairRunning || root.shareRunning
     readonly property var categories: [
-        { "id": "overview", "label": "Overview" },
-        { "id": "boot", "label": "Boot & Kernel" },
-        { "id": "services", "label": "Services" },
-        { "id": "resources", "label": "Resources" },
-        { "id": "storage", "label": "Storage" },
-        { "id": "network", "label": "Network" },
-        { "id": "desktop", "label": "Desktop" },
-        { "id": "dependencies", "label": "Dependencies" }
+        { "id": "overview", "label": qsTr("Overview") },
+        { "id": "boot", "label": qsTr("Boot & Kernel") },
+        { "id": "services", "label": qsTr("Services") },
+        { "id": "resources", "label": qsTr("Resources") },
+        { "id": "storage", "label": qsTr("Storage") },
+        { "id": "network", "label": qsTr("Network") },
+        { "id": "desktop", "label": qsTr("Desktop") },
+        { "id": "dependencies", "label": qsTr("Dependencies") }
     ]
     readonly property var visibleRows: root.rows.filter(function(row) {
         const issue = row.status === "error" || row.status === "warn" || row.status === "restricted";
@@ -54,15 +63,15 @@ Scope {
     property var categoryIssueCounts: ({})
     readonly property string overallLabelText: {
         if (root.errorCount > 0) {
-            return "Critical";
+            return qsTr("Critical");
         }
         if (root.warnCount > 0) {
-            return "Needs Attention";
+            return qsTr("Needs Attention");
         }
         if (root.restrictedCount > 0 || root.systemRunning) {
-            return "Scan Incomplete";
+            return qsTr("Scan Incomplete");
         }
-        return root.rows.length > 0 ? "Healthy" : "Scanning";
+        return root.rows.length > 0 ? qsTr("Healthy") : qsTr("Scanning");
     }
 
     function isExpanded(id) {
@@ -118,22 +127,57 @@ Scope {
         if (root.repairRunning || root.shareRunning) {
             return;
         }
+        // User scan only — no pkexec/sudo prompt on open/Refresh.
+        root.systemScanEpoch += 1;
+        root.activeSystemScanEpoch = -1;
         root.suppressScanCancel = true;
+        root.privilegedSettled = true;
+        root.elevatedDone = false;
         userScanProcess.running = false;
         systemScanProcess.running = false;
         root.userRunning = false;
         root.systemRunning = false;
         root.rows = [];
         root.rebuildTallies();
-        root.coverageMessage = "Authorizing complete system scan...";
+        root.coverageMessage = qsTr("Scanning session...");
         root.repairMessage = "";
         root.repairError = "";
         root.repairSucceeded = false;
-        root.suppressScanCancel = false;
-        root.userRunning = true;
+        const epoch = root.systemScanEpoch;
+        Qt.callLater(function() {
+            if (!root.visible || epoch !== root.systemScanEpoch) {
+                root.suppressScanCancel = false;
+                return;
+            }
+            root.suppressScanCancel = false;
+            root.userRunning = true;
+            userScanProcess.running = true;
+        });
+    }
+
+    function refreshElevated() {
+        if (root.busy || root.repairRunning || root.shareRunning) {
+            return;
+        }
+        root.systemScanEpoch += 1;
+        root.activeSystemScanEpoch = -1;
+        root.suppressScanCancel = true;
+        root.privilegedSettled = false;
+        systemScanProcess.running = false;
+        // Set before pkexec so fullscreen drops and the polkit dialog is visible.
         root.systemRunning = true;
-        userScanProcess.running = true;
-        systemScanProcess.running = true;
+        root.coverageMessage = qsTr("Waiting for polkit password dialog (may appear behind or beside this window)...");
+        const epoch = root.systemScanEpoch;
+        Qt.callLater(function() {
+            if (!root.visible || epoch !== root.systemScanEpoch) {
+                root.suppressScanCancel = false;
+                root.systemRunning = false;
+                return;
+            }
+            root.activeSystemScanEpoch = epoch;
+            root.suppressScanCancel = false;
+            systemScanProcess.running = true;
+        });
     }
 
     function ingestLine(data) {
@@ -159,13 +203,35 @@ Scope {
         };
 
         if (record.kind === "meta") {
-            if (record.id === "scan-system") {
-                root.coverageMessage = record.status === "restricted" ? record.summary : "Privileged scan running...";
+            if (record.id === "scan-user-complete") {
+                if (!root.systemRunning && !root.elevatedDone) {
+                    root.coverageMessage = qsTr("Session scan complete");
+                }
+            } else if (record.id === "scan-system") {
+                root.coverageMessage = record.status === "restricted" ? record.summary : qsTr("Elevated scan running...");
                 if (record.status === "restricted") {
+                    root.privilegedSettled = true;
                     root.markRestricted(record.summary, record.evidence);
                 }
+            } else if (record.id === "scan-system-skipped") {
+                root.privilegedSettled = true;
+                root.coverageMessage = record.summary;
+                root.upsertRecord({
+                    "kind": "check",
+                    "category": "overview",
+                    "status": "info",
+                    "id": "privileged-coverage",
+                    "title": qsTr("Elevated diagnostics"),
+                    "summary": record.summary,
+                    "evidence": record.evidence || qsTr("Optional root checks (SMART, system services) were not run"),
+                    "repairId": "",
+                    "repairLabel": "",
+                    "privilege": "system"
+                });
             } else if (record.id === "scan-system-complete") {
-                root.coverageMessage = "Privileged current-boot scan complete";
+                root.privilegedSettled = true;
+                root.elevatedDone = true;
+                root.coverageMessage = qsTr("Elevated scan complete");
             }
             return;
         }
@@ -233,9 +299,9 @@ Scope {
             "category": "overview",
             "status": "restricted",
             "id": "privileged-coverage",
-            "title": "Privileged diagnostics",
+            "title": qsTr("Privileged diagnostics"),
             "summary": summary,
-            "evidence": evidence || "Current-boot journal, kernel, system service, and drive checks are incomplete",
+            "evidence": evidence || qsTr("Current-boot journal, kernel, system service, and drive checks are incomplete"),
             "repairId": "",
             "repairLabel": "",
             "privilege": "system"
@@ -292,7 +358,7 @@ Scope {
             "summary": row.summary,
             "evidence": row.evidence,
             "repairId": parts[0] + "|" + action + "|" + parts[1],
-            "repairLabel": label + " " + parts[1],
+            "repairLabel": qsTr("%1 %2").arg(label).arg(parts[1]),
             "privilege": row.privilege
         };
         root.confirming = true;
@@ -304,7 +370,7 @@ Scope {
             return;
         }
         root.shareRunning = true;
-        root.repairMessage = mode === "copy" ? "Copying diagnostics..." : "Exporting diagnostics...";
+        root.repairMessage = mode === "copy" ? qsTr("Copying diagnostics...") : qsTr("Exporting diagnostics...");
         root.repairError = "";
         evidenceProcess.command = Commands.systemHealthHelperCommand(
             "share-evidence",
@@ -322,37 +388,37 @@ Scope {
         if (id.indexOf("manage-") === 0) {
             const parts = id.split("|");
             const action = parts.length > 1 ? parts[1] : "change";
-            const unit = parts.length > 2 ? parts[2] : "this service";
+            const unit = parts.length > 2 ? parts[2] : qsTr("this service");
             if (action === "enable") {
-                return unit + " will be enabled for future starts. It will not be started now.";
+                return qsTr("%1 will be enabled for future starts. It will not be started now.").arg(unit);
             }
             if (action === "disable") {
-                return unit + " will be disabled for future starts. It will not be stopped now.";
+                return qsTr("%1 will be disabled for future starts. It will not be stopped now.").arg(unit);
             }
             if (action === "stop") {
-                return unit + " will be stopped for the current session.";
+                return qsTr("%1 will be stopped for the current session.").arg(unit);
             }
             if (action === "restart") {
-                return unit + " will be stopped and started again.";
+                return qsTr("%1 will be stopped and started again.").arg(unit);
             }
-            return unit + " will be started now.";
+            return qsTr("%1 will be started now.").arg(unit);
         }
         if (id === "restart-networkmanager") {
-            return "Network connectivity will drop briefly while NetworkManager restarts.";
+            return qsTr("Network connectivity will drop briefly while NetworkManager restarts.");
         }
         if (id === "restart-bluetooth") {
-            return "Connected Bluetooth devices will disconnect briefly.";
+            return qsTr("Connected Bluetooth devices will disconnect briefly.");
         }
         if (id === "repair-time-sync") {
-            return "The detected time synchronization provider will be enabled and restarted.";
+            return qsTr("The detected time synchronization provider will be enabled and restarted.");
         }
         if (id === "restart-quickshell") {
-            return "Quickshell will restart and this dashboard will close.";
+            return qsTr("Quickshell will restart and this dashboard will close.");
         }
         if (id === "install-dependencies") {
-            return "The interactive dependency installer or detailed dependency check will open in a terminal.";
+            return qsTr("The interactive dependency installer or detailed dependency check will open in a terminal.");
         }
-        return "The affected desktop component will be restarted.";
+        return qsTr("The affected desktop component will be restarted.");
     }
 
     function confirmRepair() {
@@ -364,7 +430,7 @@ Scope {
         root.pendingRepair = null;
         root.repairRunning = true;
         root.repairSucceeded = false;
-        root.repairMessage = "Running " + row.repairLabel + "...";
+        root.repairMessage = qsTr("Running %1...").arg(row.repairLabel);
         root.repairError = "";
         repairProcess.command = Commands.systemHealthHelperCommand(
             row.privilege === "system" ? "repair-privileged" : "repair-user",
@@ -397,17 +463,24 @@ Scope {
         command: Commands.systemHealthHelperCommand("scan-privileged")
         running: false
         onRunningChanged: {
-            if (!running && root.systemRunning) {
+            if (!running && root.systemRunning && root.activeSystemScanEpoch === root.systemScanEpoch) {
                 root.systemRunning = false;
             }
-            if (!running && !root.suppressScanCancel && root.coverageMessage.indexOf("complete") < 0) {
-                root.coverageMessage = "Privileged scan was cancelled or unavailable";
-                root.markRestricted(root.coverageMessage, "Use Refresh to retry authorization");
+            if (!running
+                    && root.activeSystemScanEpoch === root.systemScanEpoch
+                    && !root.suppressScanCancel
+                    && !root.privilegedSettled) {
+                root.privilegedSettled = true;
+                root.coverageMessage = qsTr("Privileged scan was cancelled or unavailable");
+                root.markRestricted(root.coverageMessage, qsTr("Use Refresh to retry authorization"));
             }
         }
 
         stdout: SplitParser {
             onRead: function(data) {
+                if (root.activeSystemScanEpoch !== root.systemScanEpoch) {
+                    return;
+                }
                 root.ingestLine(data);
             }
         }
@@ -453,10 +526,10 @@ Scope {
             if (!running && root.repairRunning) {
                 root.repairRunning = false;
                 if (root.repairSucceeded) {
-                    root.repairMessage = "Repair completed; rescanning...";
+                    root.repairMessage = qsTr("Repair completed; rescanning...");
                     Qt.callLater(root.refresh);
                 } else {
-                    root.repairMessage = root.repairError.length > 0 ? root.repairError : "Repair failed";
+                    root.repairMessage = root.repairError.length > 0 ? root.repairError : qsTr("Repair failed");
                 }
             }
         }

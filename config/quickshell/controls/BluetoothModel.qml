@@ -7,7 +7,7 @@ Scope {
 
     property bool visible: false
     property bool busy: false
-    property string statusText: "BT unavailable"
+    property string statusText: qsTr("BT unavailable")
     property var devices: []
     property string message: ""
 
@@ -47,7 +47,7 @@ Scope {
     function action(name, args) {
         if (root.busy) return;
         root.busy = true;
-        root.message = "Working...";
+        root.message = qsTr("Working...");
         actionProcess.command = Commands.controlsHelperCommand(name, args || []);
         actionProcess.running = true;
     }
@@ -55,7 +55,7 @@ Scope {
     Process {
         id: statusProcess
         command: Commands.controlsHelperCommand("bluetooth-status")
-        stdout: StdioCollector { onStreamFinished: root.statusText = this.text.trim() || "BT unavailable" }
+        stdout: StdioCollector { onStreamFinished: root.statusText = this.text.trim() || qsTr("BT unavailable") }
     }
 
     Process {

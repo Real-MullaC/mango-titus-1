@@ -20,13 +20,13 @@ Scope {
     property var themeRows: []
     property var keybindRows: []
     readonly property var actions: [
-        { "id": "restart-quickshell", "label": "Restart Quickshell" },
-        { "id": "reload-wallpaper", "label": "Reload Wallpaper" },
-        { "id": "restart-networkmanager", "label": "Restart NetworkManager" },
-        { "id": "dependency-check", "label": "Dependency Check" },
-        { "id": "install-missing-deps", "label": "Install Missing Deps" },
-        { "id": "open-wallpapers", "label": "Wallpaper Folder" },
-        { "id": "gtk-settings", "label": "GTK Settings" }
+        { "id": "restart-quickshell", "label": qsTr("Restart Quickshell") },
+        { "id": "reload-wallpaper", "label": qsTr("Reload Wallpaper") },
+        { "id": "restart-networkmanager", "label": qsTr("Restart NetworkManager") },
+        { "id": "dependency-check", "label": qsTr("Dependency Check") },
+        { "id": "install-missing-deps", "label": qsTr("Install Missing Deps") },
+        { "id": "open-wallpapers", "label": qsTr("Wallpaper Folder") },
+        { "id": "gtk-settings", "label": qsTr("GTK Settings") }
     ]
     property var powerRows: []
     property bool powerDpmsAvailable: false
@@ -38,11 +38,11 @@ Scope {
     property int powerLockTimeout: 300
     property string powerConfigFile: ""
     readonly property var powerPresets: [
-        { "label": "5m", "seconds": 300 },
-        { "label": "10m", "seconds": 600 },
-        { "label": "15m", "seconds": 900 },
-        { "label": "30m", "seconds": 1800 },
-        { "label": "1h", "seconds": 3600 }
+        { "label": qsTr("5m"), "seconds": 300 },
+        { "label": qsTr("10m"), "seconds": 600 },
+        { "label": qsTr("15m"), "seconds": 900 },
+        { "label": qsTr("30m"), "seconds": 1800 },
+        { "label": qsTr("1h"), "seconds": 3600 }
     ]
 
     function openPage(name, message, process) {
@@ -124,7 +124,7 @@ Scope {
         root.utilityPage = "appearance";
         root.utilityVisible = true;
         root.dismissMenu();
-        root.message = "Loading themes...";
+        root.message = qsTr("Loading themes...");
         root.page = "appearance";
         // Force a fresh helper run (Quickshell Process won't restart if already "running")
         if (themesProcess.running) {
@@ -138,14 +138,14 @@ Scope {
         root.utilityPage = "keybinds";
         root.utilityVisible = true;
         root.dismissMenu();
-        root.openPage("keybinds", "Loading keybinds...", keybindsProcess);
+        root.openPage("keybinds", qsTr("Loading keybinds..."), keybindsProcess);
     }
 
     function openPower() {
         root.utilityPage = "power";
         root.utilityVisible = true;
         root.dismissMenu();
-        root.message = "Loading power settings...";
+        root.message = qsTr("Loading power settings...");
         root.page = "power";
         if (powerStatusProcess.running) {
             powerStatusProcess.running = false;
@@ -156,19 +156,19 @@ Scope {
 
     function formatDuration(seconds) {
         if (seconds >= 3600 && seconds % 3600 === 0) {
-            return (seconds / 3600) + "h";
+            return qsTr("%1h").arg(seconds / 3600);
         }
         if (seconds >= 60 && seconds % 60 === 0) {
-            return (seconds / 60) + "m";
+            return qsTr("%1m").arg(seconds / 60);
         }
-        return seconds + "s";
+        return qsTr("%1s").arg(seconds);
     }
 
     function openInfo() {
         root.utilityPage = "info";
         root.utilityVisible = true;
         root.dismissMenu();
-        root.openPage("info", "Loading system info...", infoProcess);
+        root.openPage("info", qsTr("Loading system info..."), infoProcess);
     }
 
     function refreshCurrentPage() {
@@ -244,7 +244,7 @@ Scope {
         }
 
         root.busy = true;
-        root.message = "Running " + action + "...";
+        root.message = qsTr("Running %1...").arg(action);
         // Hide the control popup so a polkit/terminal dialog is not covered.
         root.dismissMenu();
         actionProcess.command = Commands.controlCenterHelperCommand("action", [action]);
@@ -257,7 +257,7 @@ Scope {
         }
 
         root.busy = true;
-        root.message = "Applying " + name + "...";
+        root.message = qsTr("Applying %1...").arg(name);
         themeSetProcess.command = Commands.controlCenterHelperCommand("theme-set", [name]);
         themeSetProcess.running = true;
     }
@@ -268,7 +268,7 @@ Scope {
         }
 
         root.busy = true;
-        root.message = "Updating power settings...";
+        root.message = qsTr("Updating power settings...");
         powerActionProcess.command = Commands.controlCenterHelperCommand(action, args || []);
         powerActionProcess.running = true;
     }
@@ -355,7 +355,7 @@ Scope {
         onRunningChanged: {
             if (!running && root.busy) {
                 root.busy = false;
-                root.message = "Action dispatched";
+                root.message = qsTr("Action dispatched");
                 root.refreshCurrentPage();
             }
         }
@@ -370,7 +370,7 @@ Scope {
         onRunningChanged: {
             if (!running && root.busy) {
                 root.busy = false;
-                root.message = "Theme applied";
+                root.message = qsTr("Theme applied");
                 // Do not reopen utility if the user already dismissed it.
                 if (root.utilityVisible && root.utilityPage === "appearance") {
                     if (!themesProcess.running) {
@@ -390,7 +390,7 @@ Scope {
         onRunningChanged: {
             if (!running && root.busy) {
                 root.busy = false;
-                root.message = "Power settings updated";
+                root.message = qsTr("Power settings updated");
                 if (root.utilityVisible && root.utilityPage === "power") {
                     if (!powerStatusProcess.running) {
                         powerStatusProcess.running = true;

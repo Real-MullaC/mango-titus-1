@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Widgets
@@ -9,21 +11,40 @@ Item {
     required property int index
     required property var modelData
     required property bool selected
-    required property var launcherModel
+    required property LauncherModel launcherModel
 
     property bool iconFailed: false
     readonly property string iconName: modelData ? (modelData.icon || "") : ""
+
+    Accessible.role: Accessible.Button
+    Accessible.name: root.modelData ? root.modelData.name : ""
+    Accessible.onPressAction: {
+        if (root.modelData)
+            root.launcherModel.launchApp(root.modelData);
+    }
+    activeFocusOnTab: true
 
     implicitHeight: 54
     height: implicitHeight
 
     onIconNameChanged: root.iconFailed = false
 
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.launcherModel.launchApp(root.modelData);
+            event.accepted = true;
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: Theme.radius
         color: root.selected ? Theme.surface : Theme.transparent
         visible: root.selected
+    }
+
+    HoverHandler {
+        cursorShape: Qt.PointingHandCursor
     }
 
     TapHandler {
@@ -93,7 +114,7 @@ Item {
                 readonly property string detailLine: {
                     const detail = root.modelData.generic.length > 0 ? root.modelData.generic : root.modelData.comment;
                     const category = root.launcherModel.categoryLabel(root.modelData.primaryCategory);
-                    return detail.length > 0 ? (detail + "  -  " + category) : category;
+                    return detail.length > 0 ? qsTr("%1  -  %2").arg(detail).arg(category) : category;
                 }
                 text: detailLine
                 color: Theme.textMuted

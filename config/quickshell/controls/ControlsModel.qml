@@ -9,20 +9,22 @@ Scope {
 
     property bool visible: false
     property bool busy: false
-    property string volumeText: "VOL unavailable"
+    property string volumeText: qsTr("VOL unavailable")
     property int volumePercent: 0
     property bool volumeMuted: false
-    readonly property string volumeDisplayText: volumeText + (outputDeviceDescription.length > 0 ? " - " + outputDeviceDescription : "")
+    readonly property string volumeDisplayText: outputDeviceDescription.length > 0
+        ? qsTr("%1 - %2").arg(volumeText).arg(outputDeviceDescription)
+        : volumeText
     property var outputDevices: []
     property string outputDeviceName: ""
     property string outputDeviceDescription: ""
-    property string micText: "MIC unavailable"
-    property string mediaText: "MEDIA none"
+    property string micText: qsTr("MIC unavailable")
+    property string mediaText: qsTr("MEDIA none")
     property string mediaPlayer: ""
     property string mediaState: ""
     property string mediaArtist: ""
     property string mediaTitle: ""
-    property string bluetoothText: "BT unavailable"
+    property string bluetoothText: qsTr("BT unavailable")
     property string message: ""
     readonly property var audioSink: Pipewire.defaultAudioSink
     readonly property var audioSource: Pipewire.defaultAudioSource
@@ -33,11 +35,13 @@ Scope {
         if (sink !== null && sink.ready && sink.audio !== null) {
             root.volumePercent = root.clampPercent(sink.audio.volume * 100);
             root.volumeMuted = sink.audio.muted;
-            root.volumeText = (root.volumeMuted ? "VOL muted " : "VOL ") + root.volumePercent.toString() + "%";
+            root.volumeText = root.volumeMuted
+                ? qsTr("VOL muted %1%").arg(root.volumePercent)
+                : qsTr("VOL %1%").arg(root.volumePercent);
             root.outputDeviceName = sink.name;
             root.outputDeviceDescription = sink.description.length > 0 ? sink.description : sink.name;
         } else {
-            root.volumeText = "VOL unavailable";
+            root.volumeText = qsTr("VOL unavailable");
             root.volumeMuted = false;
             root.outputDeviceName = "";
             root.outputDeviceDescription = "";
@@ -48,9 +52,9 @@ Scope {
 
         const source = root.audioSource;
         if (source !== null && source.ready && source.audio !== null) {
-            root.micText = source.audio.muted ? "MIC muted" : "MIC on";
+            root.micText = source.audio.muted ? qsTr("MIC muted") : qsTr("MIC on");
         } else {
-            root.micText = "MIC unavailable";
+            root.micText = qsTr("MIC unavailable");
             if (!micStatusProcess.running) {
                 micStatusProcess.running = true;
             }
@@ -96,7 +100,7 @@ Scope {
         const trimmed = text.trim();
 
         if (trimmed.length === 0 || trimmed.indexOf("MEDIA ") === 0) {
-            root.mediaText = trimmed.length > 0 ? trimmed : "MEDIA none";
+            root.mediaText = trimmed.length > 0 ? trimmed : qsTr("MEDIA none");
             root.mediaPlayer = "";
             root.mediaState = "";
             root.mediaArtist = "";
@@ -127,7 +131,9 @@ Scope {
             titleParts.push(root.mediaTitle);
         }
 
-        root.mediaText = (labelParts.length > 0 ? labelParts.join(" ") : "MEDIA") + (titleParts.length > 0 ? ": " + titleParts.join(" - ") : "");
+        root.mediaText = titleParts.length > 0
+            ? qsTr("%1: %2").arg(labelParts.length > 0 ? labelParts.join(" ") : qsTr("MEDIA")).arg(titleParts.join(" - "))
+            : (labelParts.length > 0 ? labelParts.join(" ") : qsTr("MEDIA"));
     }
 
     function parseVolume(text) {
@@ -319,7 +325,7 @@ Scope {
             onStreamFinished: {
                 const sink = root.audioSink;
                 if (sink === null || !sink.ready || sink.audio === null) {
-                    root.parseVolume(this.text.length > 0 ? this.text : "VOL unavailable");
+                    root.parseVolume(this.text.length > 0 ? this.text : qsTr("VOL unavailable"));
                 }
             }
         }
@@ -336,7 +342,7 @@ Scope {
                 const source = root.audioSource;
                 if (source === null || !source.ready || source.audio === null) {
                     const text = this.text.trim();
-                    root.micText = text.length > 0 ? text : "MIC unavailable";
+                    root.micText = text.length > 0 ? text : qsTr("MIC unavailable");
                 }
             }
         }
@@ -385,7 +391,7 @@ Scope {
             onStreamFinished: {
                 const text = this.text.trim();
 
-                root.bluetoothText = text.length > 0 ? text : "BT unavailable";
+                root.bluetoothText = text.length > 0 ? text : qsTr("BT unavailable");
             }
         }
     }

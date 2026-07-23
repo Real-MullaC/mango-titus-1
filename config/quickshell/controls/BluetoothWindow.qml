@@ -8,8 +8,8 @@ pragma ComponentBehavior: Bound
 PopupWindow {
     id: root
 
-    required property var bluetoothModel
-    required property var panelWindow
+    required property BluetoothModel bluetoothModel
+    required property PanelWindow panelWindow
 
     readonly property int popupWidth: 360
     readonly property int popupHeight: 420
@@ -51,13 +51,13 @@ PopupWindow {
                     font.bold: true
                     elide: Text.ElideRight
                 }
-                ShellButton { label: "Scan"; onActivated: root.bluetoothModel.refresh(true) }
+                ShellButton { label: qsTr("Scan"); onActivated: root.bluetoothModel.refresh(true) }
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                ShellButton { Layout.fillWidth: true; label: "Bluetooth On"; onActivated: root.bluetoothModel.action("bluetooth-power", ["on"]) }
-                ShellButton { Layout.fillWidth: true; label: "Bluetooth Off"; onActivated: root.bluetoothModel.action("bluetooth-power", ["off"]) }
+                ShellButton { Layout.fillWidth: true; label: qsTr("Bluetooth On"); onActivated: root.bluetoothModel.action("bluetooth-power", ["on"]) }
+                ShellButton { Layout.fillWidth: true; label: qsTr("Bluetooth Off"); onActivated: root.bluetoothModel.action("bluetooth-power", ["off"]) }
             }
 
             ListView {
@@ -87,7 +87,7 @@ PopupWindow {
                             elide: Text.ElideRight
                         }
                         ShellButton {
-                            label: deviceRow.modelData.connected ? "Disconnect" : (deviceRow.modelData.paired ? "Connect" : "Pair")
+                            label: deviceRow.modelData.connected ? qsTr("Disconnect") : (deviceRow.modelData.paired ? qsTr("Connect") : qsTr("Pair"))
                             onActivated: root.bluetoothModel.action(deviceRow.modelData.connected ? "bluetooth-disconnect" : (deviceRow.modelData.paired ? "bluetooth-connect" : "bluetooth-pair"), [deviceRow.modelData.address])
                         }
                     }

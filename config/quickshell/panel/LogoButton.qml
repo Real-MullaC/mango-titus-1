@@ -1,5 +1,8 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Widgets
 import qs.core
 
 PanelPill {
@@ -7,27 +10,47 @@ PanelPill {
 
     signal activated
 
+    Accessible.role: Accessible.Button
+    Accessible.name: qsTr("Control center")
+    Accessible.onPressAction: root.activated()
+    activeFocusOnTab: true
+
     Layout.preferredWidth: 34
     Layout.preferredHeight: Theme.pillHeight
     Layout.minimumWidth: 34
-    hovered: logoMouse.containsMouse
-    active: logoMouse.containsMouse
+    hovered: logoHover.hovered
+    active: logoHover.hovered
+
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.activated();
+            event.accepted = true;
+        }
+    }
+
+    HoverHandler {
+        id: logoHover
+
+        cursorShape: Qt.PointingHandCursor
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        onTapped: root.activated()
+    }
 
     Item {
         anchors.centerIn: parent
         width: 20
         height: 20
 
-        Image {
+        IconImage {
             id: logoImage
 
             anchors.fill: parent
-            sourceSize.width: 40
-            sourceSize.height: 40
             source: Qt.resolvedUrl("../assets/ctt_logo.png")
-            fillMode: Image.PreserveAspectFit
+            implicitSize: 20
             asynchronous: true
-            smooth: true
             mipmap: true
             visible: status === Image.Ready
         }
@@ -40,14 +63,5 @@ PanelPill {
             font.pixelSize: Theme.bodyFontSize
             font.bold: true
         }
-    }
-
-    MouseArea {
-        id: logoMouse
-
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.activated()
     }
 }

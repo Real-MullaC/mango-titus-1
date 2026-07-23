@@ -8,8 +8,8 @@ pragma ComponentBehavior: Bound
 PopupWindow {
     id: root
 
-    required property var controlsModel
-    required property var panelWindow
+    required property ControlsModel controlsModel
+    required property PanelWindow panelWindow
 
     readonly property int popupWidth: 360
     readonly property int popupHeight: 560
@@ -84,7 +84,7 @@ PopupWindow {
                 ShellButton {
                     Layout.preferredWidth: implicitWidth
                     Layout.preferredHeight: Theme.buttonHeight
-                    label: "Refresh"
+                    label: qsTr("Refresh")
                     onActivated: root.controlsModel.refresh()
                 }
             }
@@ -96,11 +96,12 @@ PopupWindow {
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
+                textFormat: Text.PlainText
                 elide: Text.ElideRight
             }
 
             SectionLabel {
-                label: "Volume"
+                label: qsTr("Volume")
             }
 
             RowLayout {
@@ -112,6 +113,11 @@ PopupWindow {
 
                     property int pendingPercent: root.controlsModel.volumePercent
                     readonly property int displayPercent: volumeMouse.pressed ? pendingPercent : root.controlsModel.volumePercent
+
+                    Accessible.role: Accessible.Slider
+                    Accessible.name: qsTr("Volume")
+                    Accessible.description: qsTr("%1 percent").arg(volumeSlider.displayPercent)
+                    activeFocusOnTab: true
 
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.volumeControlHeight
@@ -178,6 +184,7 @@ PopupWindow {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.panelFontSize
                     font.bold: true
+                    textFormat: Text.PlainText
                     horizontalAlignment: Text.AlignRight
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -185,24 +192,25 @@ PopupWindow {
                 ControlsActionButton {
                     Layout.preferredWidth: root.muteButtonWidth
                     Layout.preferredHeight: root.volumeControlHeight
-                    label: root.controlsModel.volumeMuted ? "Unmute" : "Mute"
+                    label: root.controlsModel.volumeMuted ? qsTr("Unmute") : qsTr("Mute")
                     enabled: !root.controlsModel.busy
                     onActivated: root.controlsModel.volumeToggleMute()
                 }
             }
 
             SectionLabel {
-                label: "Output"
+                label: qsTr("Output")
             }
 
             Text {
                 Layout.fillWidth: true
                 visible: root.controlsModel.outputDevices.length === 0
-                text: "OUTPUT unavailable"
+                text: qsTr("OUTPUT unavailable")
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.panelFontSize
                 font.bold: true
+                textFormat: Text.PlainText
                 elide: Text.ElideRight
             }
 
@@ -220,13 +228,43 @@ PopupWindow {
 
                     required property var modelData
 
+                    Accessible.role: Accessible.Button
+                    Accessible.name: outputDeviceRow.modelData.description
+                    Accessible.onPressAction: {
+                        if (!root.controlsModel.busy && !outputDeviceRow.modelData.isDefault)
+                            root.controlsModel.outputSetDefault(outputDeviceRow.modelData.name);
+                    }
+                    activeFocusOnTab: !outputDeviceRow.modelData.isDefault
+
                     width: ListView.view ? ListView.view.width : 0
                     height: root.outputDeviceRowHeight
                     radius: Theme.radius
-                    color: outputMouse.containsMouse && !outputDeviceRow.modelData.isDefault && !root.controlsModel.busy ? Theme.surfaceHover : Theme.surface
+                    color: outputDeviceRow.modelData.isDefault || (root.controlsModel.busy && !outputDeviceRow.modelData.isDefault)
+                        ? Theme.surface
+                        : (outputHover.hovered ? Theme.surfaceHover : Theme.surface)
                     border.color: outputDeviceRow.modelData.isDefault ? Theme.accent : Theme.border
                     border.width: 1
-                    opacity: root.controlsModel.busy && !outputDeviceRow.modelData.isDefault ? 0.5 : 1
+
+                    Keys.onPressed: function(event) {
+                        if (root.controlsModel.busy || outputDeviceRow.modelData.isDefault)
+                            return;
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                            root.controlsModel.outputSetDefault(outputDeviceRow.modelData.name);
+                            event.accepted = true;
+                        }
+                    }
+
+                    HoverHandler {
+                        id: outputHover
+                        enabled: !root.controlsModel.busy && !outputDeviceRow.modelData.isDefault
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    }
+
+                    TapHandler {
+                        enabled: !root.controlsModel.busy && !outputDeviceRow.modelData.isDefault
+                        acceptedButtons: Qt.LeftButton
+                        onTapped: root.controlsModel.outputSetDefault(outputDeviceRow.modelData.name)
+                    }
 
                     RowLayout {
                         anchors.fill: parent
@@ -248,7 +286,7 @@ PopupWindow {
 
                         Text {
                             Layout.preferredWidth: 58
-                            text: outputDeviceRow.modelData.isDefault ? "Default" : "Set"
+                            text: outputDeviceRow.modelData.isDefault ? qsTr("Default") : qsTr("Set")
                             color: outputDeviceRow.modelData.isDefault ? Theme.accent : Theme.textMuted
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.smallFontSize
@@ -259,16 +297,6 @@ PopupWindow {
                             elide: Text.ElideRight
                         }
                     }
-
-                    MouseArea {
-                        id: outputMouse
-
-                        anchors.fill: parent
-                        enabled: !root.controlsModel.busy && !outputDeviceRow.modelData.isDefault
-                        hoverEnabled: true
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: root.controlsModel.outputSetDefault(outputDeviceRow.modelData.name)
-                    }
                 }
             }
 
@@ -277,20 +305,21 @@ PopupWindow {
                 spacing: root.rowSpacing
 
                 SectionLabel {
-                    label: "Microphone"
+                    label: qsTr("Microphone")
                 }
 
                 Text {
                     text: root.controlsModel.micText
-                    color: root.controlsModel.micText === "MIC muted" ? Theme.danger : Theme.text
+                    color: root.controlsModel.micText === qsTr("MIC muted") ? Theme.danger : Theme.text
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.panelFontSize
                     font.bold: true
+                    textFormat: Text.PlainText
                 }
             }
 
             SectionLabel {
-                label: "Media"
+                label: qsTr("Media")
             }
 
             Rectangle {
@@ -340,7 +369,7 @@ PopupWindow {
                 ControlsActionButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.actionButtonHeight
-                    label: "Previous"
+                    label: qsTr("Previous")
                     enabled: !root.controlsModel.busy && root.controlsModel.mediaPlayer.length > 0
                     onActivated: root.controlsModel.mediaPrevious()
                 }
@@ -348,7 +377,7 @@ PopupWindow {
                 ControlsActionButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.actionButtonHeight
-                    label: "Play/Pause"
+                    label: qsTr("Play/Pause")
                     enabled: !root.controlsModel.busy && root.controlsModel.mediaPlayer.length > 0
                     onActivated: root.controlsModel.mediaPlayPause()
                 }
@@ -356,7 +385,7 @@ PopupWindow {
                 ControlsActionButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.actionButtonHeight
-                    label: "Next"
+                    label: qsTr("Next")
                     enabled: !root.controlsModel.busy && root.controlsModel.mediaPlayer.length > 0
                     onActivated: root.controlsModel.mediaNext()
                 }

@@ -8,7 +8,7 @@ Scope {
     property bool visible: false
     property string query: ""
     property string category: "all"
-    property string status: "Loading applications..."
+    property string status: qsTr("Loading applications...")
     property int selectedIndex: 0
     property var apps: []
     property var categories: []
@@ -16,20 +16,20 @@ Scope {
 
     // Hoisted once — delegates must not rebuild this map per row/keystroke.
     readonly property var categoryLabels: ({
-        "AudioVideo": "Media",
-        "Development": "Dev",
-        "Education": "Learn",
-        "Game": "Games",
-        "Graphics": "Graphics",
-        "Network": "Network",
-        "Office": "Office",
-        "Settings": "Settings",
-        "System": "System",
-        "Utility": "Tools"
+        "AudioVideo": qsTr("Media"),
+        "Development": qsTr("Dev"),
+        "Education": qsTr("Learn"),
+        "Game": qsTr("Games"),
+        "Graphics": qsTr("Graphics"),
+        "Network": qsTr("Network"),
+        "Office": qsTr("Office"),
+        "Settings": qsTr("Settings"),
+        "System": qsTr("System"),
+        "Utility": qsTr("Tools")
     })
 
     function categoryLabel(category) {
-        return root.categoryLabels[category] || category;
+        return root.categoryLabels[category] || qsTr(category);
     }
 
     function primaryCategory(app) {
@@ -163,7 +163,7 @@ Scope {
 
         const categories = [{
             "id": "all",
-            "label": "All",
+            "label": qsTr("All"),
             "count": apps.length
         }];
         const categoryIds = Object.keys(categoryCounts).sort(function(a, b) {
@@ -180,7 +180,7 @@ Scope {
 
         root.apps = apps;
         root.categories = categories;
-        root.status = apps.length === 1 ? "1 application" : apps.length + " applications";
+        root.status = apps.length === 1 ? qsTr("1 application") : qsTr("%1 applications").arg(apps.length);
         root.selectedIndex = 0;
         root.refreshFilteredApps();
     }
@@ -190,7 +190,7 @@ Scope {
         root.query = "";
         root.category = "all";
         root.selectedIndex = 0;
-        root.status = "Loading applications...";
+        root.status = qsTr("Loading applications...");
         root.refreshFilteredApps();
         if (!indexProcess.running) {
             indexProcess.running = true;

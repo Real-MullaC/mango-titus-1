@@ -8,8 +8,8 @@ pragma ComponentBehavior: Bound
 PopupWindow {
     id: root
 
-    required property var networkModel
-    required property var panelWindow
+    required property NetworkModel networkModel
+    required property PanelWindow panelWindow
 
     readonly property int popupWidth: 620
     readonly property int popupHeight: 680
@@ -81,7 +81,7 @@ PopupWindow {
                 ShellButton {
                     Layout.preferredWidth: implicitWidth
                     Layout.preferredHeight: Theme.buttonHeight
-                    label: "Scan"
+                    label: qsTr("Scan")
                     enabled: !root.networkModel.busy
                     onActivated: root.networkModel.refresh(true)
                 }
@@ -94,11 +94,12 @@ PopupWindow {
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
+                textFormat: Text.PlainText
                 elide: Text.ElideRight
             }
 
             SectionLabel {
-                label: "Active"
+                label: qsTr("Active")
             }
 
             ListView {
@@ -126,7 +127,7 @@ PopupWindow {
             Text {
                 Layout.fillWidth: true
                 visible: root.networkModel.activeConnections.length === 0
-                text: "No active connections"
+                text: qsTr("No active connections")
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
@@ -134,7 +135,7 @@ PopupWindow {
             }
 
             SectionLabel {
-                label: "Wi-Fi"
+                label: qsTr("Wi-Fi")
             }
 
             ListView {
@@ -168,7 +169,7 @@ PopupWindow {
             Text {
                 Layout.fillWidth: true
                 visible: root.networkModel.wifiNetworks.length === 0
-                text: "No visible Wi-Fi networks"
+                text: qsTr("No visible Wi-Fi networks")
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
@@ -214,7 +215,7 @@ PopupWindow {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             visible: wifiPasswordInput.text.length === 0
-                            text: "Password"
+                            text: qsTr("Password")
                             color: Theme.placeholder
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.inputFontSize
@@ -225,7 +226,7 @@ PopupWindow {
                     ShellButton {
                         Layout.preferredWidth: implicitWidth
                         Layout.preferredHeight: Theme.buttonHeight
-                        label: "Connect"
+                        label: qsTr("Connect")
                         enabled: !root.networkModel.busy
                         onActivated: root.networkModel.connectSelectedWifi()
                     }
@@ -233,7 +234,7 @@ PopupWindow {
             }
 
             SectionLabel {
-                label: "Saved"
+                label: qsTr("Saved")
             }
 
             ListView {
@@ -257,17 +258,18 @@ PopupWindow {
             Text {
                 Layout.fillWidth: true
                 visible: root.networkModel.savedProfiles.length === 0
-                text: "No saved Ethernet, Wi-Fi, or VPN profiles"
+                text: qsTr("No saved Ethernet, Wi-Fi, or VPN profiles")
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
+                textFormat: Text.PlainText
             }
 
             ShellButton {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.networkModel.editorAvailable ? 36 : 0
                 visible: root.networkModel.editorAvailable
-                label: "Edit Connections"
+                label: qsTr("Edit Connections")
                 compact: false
                 onActivated: root.networkModel.openEditor()
             }

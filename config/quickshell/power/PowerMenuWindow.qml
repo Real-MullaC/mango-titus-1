@@ -8,8 +8,8 @@ pragma ComponentBehavior: Bound
 PopupWindow {
     id: root
 
-    required property var powerMenuModel
-    required property var panelWindow
+    required property PowerMenuModel powerMenuModel
+    required property PanelWindow panelWindow
 
     readonly property int popupWidth: 240
     readonly property int menuHeight: 292
@@ -28,12 +28,12 @@ PopupWindow {
     onVisibleChanged: if (!visible) root.powerMenuModel.close()
 
     readonly property var cancelAction: {
-        "label": "Cancel",
-        "detail": "Return to power menu"
+        "label": qsTr("Cancel"),
+        "detail": qsTr("Return to power menu")
     }
 
     readonly property var confirmButtonAction: {
-        "label": "Confirm",
+        "label": qsTr("Confirm"),
         "detail": powerMenuModel.pendingAction ? powerMenuModel.pendingAction.label : ""
     }
 
@@ -85,15 +85,17 @@ PopupWindow {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.inputFontSize
                     font.bold: true
+                    textFormat: Text.PlainText
                     elide: Text.ElideRight
                 }
 
                 Text {
                     Layout.fillWidth: true
-                    text: "This action will affect the current session or system."
+                    text: qsTr("This action will affect the current session or system.")
                     color: Theme.textMuted
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.smallFontSize
+                    textFormat: Text.PlainText
                     wrapMode: Text.WordWrap
                 }
 

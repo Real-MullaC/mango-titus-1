@@ -400,6 +400,12 @@ if [[ -x $MANGO_CONFIG/scripts/mango-titus-session ]]; then
 		/usr/local/bin/mango-titus-session
 fi
 
+# Root-owned health helper for pkexec privileged scans (user copies under ~/.local are rejected).
+if [[ -x $DATA_DIR/scripts/mango-titus-health ]]; then
+	sudo install -Dm755 "$DATA_DIR/scripts/mango-titus-health" \
+		/usr/local/bin/mango-titus-health
+fi
+
 # Short session helper names used by binds (do not conflict with dwm-titus)
 for h in screenshot.sh wallpaper.sh lock.sh terminal.sh \
 	mango-titus-display-setup mango-titus-display-profile; do

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Services.Notifications
@@ -84,29 +86,46 @@ Rectangle {
         }
 
         Rectangle {
+            id: closeButton
+
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Dismiss notification")
+            Accessible.onPressAction: root.dismiss()
+            activeFocusOnTab: true
+
             Layout.preferredWidth: Theme.closeButtonSize - Theme.listSpacing
             Layout.preferredHeight: Theme.closeButtonSize - Theme.listSpacing
             radius: Theme.radius
-            color: closeMouse.containsMouse ? Theme.surfaceHover : Theme.transparent
+            color: closeHover.hovered ? Theme.surfaceHover : Theme.transparent
             border.color: Theme.border
             border.width: 1
 
+            Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                    root.dismiss();
+                    event.accepted = true;
+                }
+            }
+
+            HoverHandler {
+                id: closeHover
+
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onTapped: root.dismiss()
+            }
+
             Text {
                 anchors.centerIn: parent
-                text: "x"
+                text: qsTr("x")
                 color: Theme.text
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.panelFontSize
                 font.bold: true
                 textFormat: Text.PlainText
-            }
-
-            MouseArea {
-                id: closeMouse
-
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.dismiss()
             }
         }
     }

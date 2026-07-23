@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import qs.core
 
@@ -8,17 +10,36 @@ Rectangle {
 
     signal activated
 
+    Accessible.role: Accessible.Button
+    Accessible.name: root.label
+    Accessible.onPressAction: {
+        if (root.enabled)
+            root.activated();
+    }
+    activeFocusOnTab: true
+
     implicitWidth: actionLabel.implicitWidth + 24
     implicitHeight: Theme.buttonHeight
     radius: Theme.radius
-    color: controlHover.hovered && root.enabled ? Theme.surfaceHover : Theme.surface
+    color: !root.enabled ? Theme.surface
+        : (controlHover.hovered ? Theme.surfaceHover : Theme.surface)
     border.color: Theme.border
     border.width: 1
-    opacity: root.enabled ? 1 : 0.5
+
+    Keys.onPressed: function(event) {
+        if (!root.enabled)
+            return;
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.activated();
+            event.accepted = true;
+        }
+    }
 
     HoverHandler {
         id: controlHover
+
         enabled: root.enabled
+        cursorShape: Qt.PointingHandCursor
     }
 
     TapHandler {
@@ -32,7 +53,7 @@ Rectangle {
 
         anchors.centerIn: parent
         text: root.label
-        color: Theme.text
+        color: !root.enabled ? Theme.textMuted : Theme.text
         font.family: Theme.fontFamily
         font.pixelSize: Theme.panelFontSize
         font.bold: true

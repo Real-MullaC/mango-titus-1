@@ -8,9 +8,9 @@ pragma ComponentBehavior: Bound
 FloatingWindow {
     id: root
 
-    required property var launcherModel
+    required property LauncherModel launcherModel
 
-    title: "dwm launcher"
+    title: qsTr("dwm launcher")
     visible: launcherModel.visible
     implicitWidth: 760
     implicitHeight: 560
@@ -55,11 +55,12 @@ FloatingWindow {
             spacing: Theme.popupSpacing
 
             Text {
-                text: "Applications"
+                text: qsTr("Applications")
                 color: Theme.text
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.titleFontSize
                 font.bold: true
+                textFormat: Text.PlainText
                 verticalAlignment: Text.AlignVCenter
             }
 
@@ -121,19 +122,21 @@ FloatingWindow {
                     anchors.leftMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
                     visible: launcherSearch.text.length === 0
-                    text: "Search applications"
+                    text: qsTr("Search applications")
                     color: Theme.placeholder
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.inputFontSize
+                    textFormat: Text.PlainText
                 }
             }
 
             Text {
                 Layout.fillWidth: true
-                text: root.launcherModel.filteredApps.length + " shown / " + root.launcherModel.status
+                text: qsTr("%1 shown / %2").arg(root.launcherModel.filteredApps.length).arg(root.launcherModel.status)
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
+                textFormat: Text.PlainText
                 elide: Text.ElideRight
             }
 

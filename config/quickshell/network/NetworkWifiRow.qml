@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import qs.core
@@ -11,6 +13,11 @@ Rectangle {
     signal selectedRequested
     signal connectRequested(var network)
 
+    Accessible.role: Accessible.Button
+    Accessible.name: root.network ? root.network.ssid : qsTr("Wi-Fi network")
+    Accessible.onPressAction: root.selectedRequested()
+    activeFocusOnTab: true
+
     implicitHeight: 54
     height: implicitHeight
     color: root.selected ? Theme.surfaceHover : (rowHover.hovered ? Theme.surfaceHover : Theme.surface)
@@ -18,8 +25,16 @@ Rectangle {
     border.width: root.selected ? 1 : 0
     radius: Theme.radius
 
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.selectedRequested();
+            event.accepted = true;
+        }
+    }
+
     HoverHandler {
         id: rowHover
+        cursorShape: Qt.PointingHandCursor
     }
 
     TapHandler {
@@ -49,7 +64,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: (root.network.security.length > 0 ? root.network.security : "Open") + " - " + root.network.signal + "% - " + root.network.device
+                text: qsTr("%1 - %2% - %3").arg(root.network.security.length > 0 ? root.network.security : qsTr("Open")).arg(root.network.signal).arg(root.network.device)
                 color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
@@ -60,7 +75,7 @@ Rectangle {
 
         Text {
             Layout.preferredWidth: 54
-            text: root.network.active ? "Active" : ""
+            text: root.network.active ? qsTr("Active") : ""
             color: Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.smallFontSize
@@ -72,17 +87,34 @@ Rectangle {
         Rectangle {
             id: connectChip
 
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Connect")
+            Accessible.onPressAction: {
+                if (!root.busy)
+                    root.connectRequested(root.network);
+            }
+            activeFocusOnTab: true
+
             Layout.preferredWidth: actionText.implicitWidth + 18
             Layout.preferredHeight: Theme.chipHeight
-            color: connectHover.hovered && !root.busy ? Theme.accent : Theme.border
+            color: root.busy ? Theme.border
+                : (connectHover.hovered ? Theme.accent : Theme.border)
             radius: Theme.radius
-            opacity: root.busy ? 0.5 : 1
+
+            Keys.onPressed: function(event) {
+                if (root.busy)
+                    return;
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                    root.connectRequested(root.network);
+                    event.accepted = true;
+                }
+            }
 
             Text {
                 id: actionText
 
                 anchors.centerIn: parent
-                text: "Connect"
+                text: qsTr("Connect")
                 color: Theme.textStrong
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.smallFontSize
@@ -92,6 +124,7 @@ Rectangle {
             HoverHandler {
                 id: connectHover
                 enabled: !root.busy
+                cursorShape: Qt.PointingHandCursor
             }
 
             TapHandler {

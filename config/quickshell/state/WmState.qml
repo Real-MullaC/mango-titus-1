@@ -7,7 +7,7 @@ Scope {
 
     property int currentWorkspace: 0
     property var workspaceNames: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
-    property string activeWindowTitle: "Desktop"
+    property string activeWindowTitle: qsTr("Desktop")
     property string statusText: ""
     property var statusSegments: []
 
@@ -35,7 +35,7 @@ Scope {
                 // Ignore IPC/helper JSON errors (e.g. {"error":"unknown command"}).
                 const bad = value.length === 0 || value.indexOf("{\"error\"") === 0;
 
-                root.activeWindowTitle = bad ? "Desktop" : value;
+                root.activeWindowTitle = bad ? qsTr("Desktop") : value;
             } else if (key === "status") {
                 root.statusText = value;
                 root.updateStatusSegments();

@@ -5,7 +5,7 @@ import qs.core
 PopupWindow {
     id: root
 
-    required property var anchorWindow
+    required property PanelWindow anchorWindow
     property string label: ""
     property real anchorX: 0
     property real anchorY: 0

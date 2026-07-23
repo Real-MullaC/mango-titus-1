@@ -8,8 +8,8 @@ pragma ComponentBehavior: Bound
 PopupWindow {
     id: root
 
-    required property var notificationModel
-    required property var panelWindow
+    required property NotificationModel notificationModel
+    required property PanelWindow panelWindow
 
     readonly property int popupWidth: 380
     readonly property int edgeMargin: Theme.rowSpacing

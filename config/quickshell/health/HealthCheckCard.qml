@@ -8,7 +8,7 @@ Rectangle {
     id: root
 
     required property var rowData
-    required property var healthModel
+    required property SystemHealthModel healthModel
 
     readonly property bool expanded: healthModel.isExpanded(rowData.id)
     readonly property bool hasServiceActions: rowData.repairId.indexOf("manage-") === 0
@@ -92,7 +92,7 @@ Rectangle {
                     || root.hasServiceActions
                     || root.hasEvidenceActions
                     || (root.rowData.repairId.length > 0 && !root.hasServiceActions)
-                label: root.expanded ? "Less" : "Details"
+                label: root.expanded ? qsTr("Less") : qsTr("Details")
                 onActivated: root.healthModel.toggleExpanded(root.rowData.id)
             }
         }
@@ -118,11 +118,11 @@ Rectangle {
 
                 Repeater {
                     model: root.hasServiceActions ? [
-                        { "action": "start", "label": "Start" },
-                        { "action": "stop", "label": "Stop" },
-                        { "action": "restart", "label": "Restart" },
-                        { "action": "disable", "label": "Disable" },
-                        { "action": "enable", "label": "Enable" }
+                        { "action": "start", "label": qsTr("Start") },
+                        { "action": "stop", "label": qsTr("Stop") },
+                        { "action": "restart", "label": qsTr("Restart") },
+                        { "action": "disable", "label": qsTr("Disable") },
+                        { "action": "enable", "label": qsTr("Enable") }
                     ] : []
 
                     ShellButton {
@@ -143,8 +143,8 @@ Rectangle {
 
                 Repeater {
                     model: root.hasEvidenceActions ? [
-                        { "action": "copy", "label": "Copy" },
-                        { "action": "export", "label": "Export" }
+                        { "action": "copy", "label": qsTr("Copy") },
+                        { "action": "export", "label": qsTr("Export") }
                     ] : []
 
                     ShellButton {

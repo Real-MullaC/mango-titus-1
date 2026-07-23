@@ -405,14 +405,33 @@ emit_failed_services() {
 }
 
 scan_desktop() {
-	local status detail
+	local status detail wayland_sock=
 
+	# Prefer env (normal mango-spawned clients). Fall back to session type + socket:
+	# qs restarted outside mango (e.g. SSH) may lack WAYLAND_DISPLAY even though
+	# the seat session is healthy.
 	if [[ -n ${WAYLAND_DISPLAY:-} ]]; then
-		emit_check desktop ok wayland-display "Wayland display" "${WAYLAND_DISPLAY}" "Wayland session display is set"
+		emit_check desktop ok wayland-display "Wayland display" "${WAYLAND_DISPLAY}" "WAYLAND_DISPLAY is set"
 	elif [[ -n ${DISPLAY:-} ]]; then
-		emit_check desktop ok x11-display "X11 display" "${DISPLAY}" "X11 session display is set"
+		emit_check desktop ok x11-display "X11 display" "${DISPLAY}" "DISPLAY is set"
+	elif [[ ${XDG_SESSION_TYPE:-} == wayland ]]; then
+		wayland_sock=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${WAYLAND_DISPLAY:-wayland-0}
+		if [[ -S ${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wayland-0 ]]; then
+			emit_check desktop ok wayland-display "Wayland display" "wayland-0 (inferred)" \
+				"XDG_SESSION_TYPE=wayland and wayland-0 socket present; WAYLAND_DISPLAY unset in this process"
+		elif [[ -S $wayland_sock ]]; then
+			emit_check desktop ok wayland-display "Wayland display" "${WAYLAND_DISPLAY:-wayland-0} (inferred)" \
+				"Wayland session socket present; WAYLAND_DISPLAY unset in this process"
+		else
+			emit_check desktop warn session-display "Session display" "Wayland session, no socket" \
+				"XDG_SESSION_TYPE=wayland but no wayland-* socket under XDG_RUNTIME_DIR"
+		fi
+	elif [[ -S ${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wayland-0 ]] && pgrep -x mango >/dev/null 2>&1; then
+		emit_check desktop ok wayland-display "Wayland display" "wayland-0 (inferred)" \
+			"mangowm running with wayland-0 socket; WAYLAND_DISPLAY unset in this process"
 	else
-		emit_check desktop warn session-display "Session display" "Not set" "WAYLAND_DISPLAY/DISPLAY unset — dashboard may be outside the desktop session"
+		emit_check desktop warn session-display "Session display" "Not set" \
+			"WAYLAND_DISPLAY/DISPLAY unset — dashboard may be outside the desktop session"
 	fi
 
 	if [[ -n ${DBUS_SESSION_BUS_ADDRESS:-} ]]; then
@@ -441,6 +460,19 @@ scan_desktop() {
 		emit_check desktop info picom-process "Picom" "Installed (unused)" "mangowm provides compositor effects; picom is not required"
 	else
 		emit_check desktop info picom-process "Compositor" "mangowm built-in" "Effects are handled by mangowm (no picom)"
+	fi
+
+	# XWayland: X11 compatibility for Wayland sessions (often started on demand).
+	if pgrep -x Xwayland >/dev/null 2>&1; then
+		detail=$(pgrep -a -x Xwayland 2>/dev/null | first_lines 1 || printf running)
+		emit_check desktop ok xwayland "XWayland" "Running" "$detail"
+	elif [[ -n ${WAYLAND_DISPLAY:-} || ${XDG_SESSION_TYPE:-} == wayland || -S ${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wayland-0 ]]; then
+		emit_check desktop info xwayland "XWayland" "Not running" \
+			"No Xwayland process yet — X11 apps typically start it on demand under mangowm"
+	elif [[ -n ${DISPLAY:-} ]]; then
+		emit_check desktop info xwayland "XWayland" "N/A (X11 session)" "Native X11 display; XWayland is a Wayland compatibility layer"
+	else
+		emit_check desktop info xwayland "XWayland" "Unknown" "No Wayland/X11 display in this environment"
 	fi
 
 	local config_home=${XDG_CONFIG_HOME:-$HOME/.config}
@@ -584,23 +616,84 @@ scan_hardware_snapshot() {
 	fi
 }
 
-scan_dependencies() {
-	local diagnostics
+emit_dep_cmd() {
+	# emit_dep_cmd <id> <title> <cmd...> [required|optional]
+	# Passes if any of the listed commands exist on PATH.
+	local id=$1
+	local title=$2
+	shift 2
+	local mode=required
+	local cmds=()
+	local cmd found=
 
-	if diagnostics=$(find_sibling_command dwm-diagnostics); then
-		"$diagnostics" --format health-tsv || true
+	while (($# > 0)); do
+		case $1 in
+		required | optional)
+			mode=$1
+			shift
+			;;
+		*)
+			cmds+=("$1")
+			shift
+			;;
+		esac
+	done
+
+	for cmd in "${cmds[@]}"; do
+		if command -v "$cmd" >/dev/null 2>&1; then
+			found=$cmd
+			break
+		fi
+	done
+
+	if [[ -n $found ]]; then
+		emit_check dependencies ok "$id" "$title" "Available ($found)" "${cmds[*]}"
+		return
+	fi
+
+	if [[ $mode == optional ]]; then
+		emit_check dependencies warn "$id" "$title" "Optional and missing" "Need one of: ${cmds[*]}" \
+			install-dependencies "Open dependency installer" user
 	else
-		emit_check dependencies info diagnostics "Dependency diagnostics" "Optional helper not installed" "dwm-diagnostics is dwm-titus-only; mango-titus uses package install instead"
+		emit_check dependencies error "$id" "$title" "Required but missing" "Need one of: ${cmds[*]}" \
+			install-dependencies "Open dependency installer" user
 	fi
 }
 
+scan_dependencies() {
+	# Never call dwm-diagnostics — it emits X11/dwm required deps (xrandr, picom, feh, …)
+	# that are wrong for mango-titus Wayland. Mirror mango-titus-check-deps instead.
+
+	emit_dep_cmd dependency-mangowm "mangowm" mango mangowm required
+	emit_dep_cmd dependency-quickshell "Quickshell" qs quickshell required
+	emit_dep_cmd dependency-wallpaper "Wallpaper daemon" awww swww required
+	emit_dep_cmd dependency-swayidle "swayidle" swayidle required
+	emit_dep_cmd dependency-swaylock "swaylock" swaylock swaylock-effects required
+	emit_dep_cmd dependency-nmcli "NetworkManager (nmcli)" nmcli required
+	emit_dep_cmd dependency-terminal "Terminal" alacritty kitty ghostty foot xterm required
+	emit_dep_cmd dependency-wlr-randr "wlr-randr" wlr-randr optional
+	emit_dep_cmd dependency-wl-copy "wl-clipboard" wl-copy optional
+	emit_dep_cmd dependency-cliphist "cliphist" cliphist optional
+	emit_dep_cmd dependency-flameshot "Flameshot" flameshot optional
+	emit_dep_cmd dependency-brightnessctl "brightnessctl" brightnessctl optional
+	emit_dep_cmd dependency-playerctl "playerctl" playerctl optional
+	emit_dep_cmd dependency-pactl "pactl" pactl optional
+}
+
 scan_user() {
+	local boot_work
+
 	emit_meta overview info scan-user "User scan" "Running" "Read-only session and resource diagnostics"
 	scan_identity
 	scan_memory
 	scan_load
 	scan_storage
 	scan_user_services
+	# Boot/journal is often readable without root (systemd-journal/wheel); fill Boot & Kernel
+	# even when the privileged scan is skipped or cancelled.
+	boot_work=$(mktemp -d)
+	scan_boot_logs "$boot_work"
+	rm -rf "$boot_work"
 	scan_desktop
 	scan_network
 	scan_package_database
@@ -618,17 +711,62 @@ log_evidence() {
 	printf 'Recurring: %s | Recent: %s' "$recurring" "$recent"
 }
 
+collect_boot_log() {
+	# Try without elevation first (many installs allow journalctl for the login user),
+	# then fall back to the privileged elevator when running under scan-system.
+	local out=$1
+	shift
+
+	if "$@" >"$out" 2>/dev/null; then
+		return 0
+	fi
+	case $(privilege_mode) in
+	none) return 1 ;;
+	*) run_privileged_bounded "$@" >"$out" 2>/dev/null ;;
+	esac
+}
+
+filter_boot_noise() {
+	# Drop known-benign / session-noise priority=err lines so Boot & Kernel stays useful.
+	# Kept as grep -Ev so real faults still surface.
+	grep -Ev \
+		-e 'virt/tdx: TDX not supported' \
+		-e 'gkr-pam:' \
+		-e 'Process [0-9]+ \(qs\) of user [0-9]+ dumped core' \
+		-e 'Process [0-9]+ \(quickshell\) of user [0-9]+ dumped core' \
+		-e 'sudo: a password is required' \
+		-e 'a password is required ; PWD=' \
+		-e 'pam_unix\(polkit-1:auth\):' \
+		-e 'Could not register app ID' \
+		-e 'Guest agent is not responding' \
+		-e 'Applying output configuration failed' \
+		-e '^Stack trace of thread' \
+		-e '^#[[:space:]]*[0-9]+' \
+		-e '^ELF object binary architecture' \
+		-e '^[[:space:]]*n/a\[' \
+		-e 'libQt6' \
+		-e 'libc\.so' \
+		|| true
+}
+
 scan_boot_logs() {
 	local work=$1
 	local journal_file=$work/journal-errors
+	local journal_raw=$work/journal-errors.raw
 	local kernel_file=$work/kernel-errors
-	local count evidence patterns pattern_count kernel_available=0
+	local kernel_raw=$work/kernel-errors.raw
+	local count evidence patterns pattern_count kernel_available=0 noise_count=0
 
-	if command -v journalctl >/dev/null 2>&1 && run_privileged_bounded journalctl -b -p err --no-pager -q -o cat >"$journal_file" 2>/dev/null; then
+	if command -v journalctl >/dev/null 2>&1 && collect_boot_log "$journal_raw" journalctl -b -p err --no-pager -q -o cat; then
+		filter_boot_noise <"$journal_raw" >"$journal_file"
+		noise_count=$(awk 'NF { count++ } END { print count + 0 }' "$journal_raw")
 		count=$(awk 'NF { count++ } END { print count + 0 }' "$journal_file")
 		if ((count > 0)); then
 			evidence=$(log_evidence "$journal_file")
 			emit_check boot warn journal-errors "Boot journal errors" "$count current-boot entries" "$evidence"
+		elif ((noise_count > 0)); then
+			emit_check boot info journal-errors "Boot journal errors" "Only filtered noise ($noise_count raw err lines)" \
+				"Ignored TDX/guest-agent/keyring/qs-core-dump noise; no remaining priority=err lines"
 		else
 			emit_check boot ok journal-errors "Boot journal errors" "No priority error entries" "journalctl -b -p err"
 		fi
@@ -637,10 +775,12 @@ scan_boot_logs() {
 		: >"$journal_file"
 	fi
 
-	if command -v journalctl >/dev/null 2>&1 && run_privileged_bounded journalctl -k -b -p err --no-pager -q -o cat >"$kernel_file" 2>/dev/null; then
+	if command -v journalctl >/dev/null 2>&1 && collect_boot_log "$kernel_raw" journalctl -k -b -p err --no-pager -q -o cat; then
 		kernel_available=1
-	elif command -v dmesg >/dev/null 2>&1 && run_privileged_bounded dmesg --level=emerg,alert,crit,err >"$kernel_file" 2>/dev/null; then
+		filter_boot_noise <"$kernel_raw" >"$kernel_file"
+	elif command -v dmesg >/dev/null 2>&1 && collect_boot_log "$kernel_raw" dmesg --level=emerg,alert,crit,err; then
 		kernel_available=1
+		filter_boot_noise <"$kernel_raw" >"$kernel_file"
 	else
 		emit_check boot restricted kernel-errors "Kernel errors" "Kernel log unavailable" "Neither journalctl nor dmesg returned readable kernel errors"
 		: >"$kernel_file"
@@ -670,6 +810,10 @@ scan_boot_logs() {
 		else
 			emit_check boot warn kernel-taint "Kernel taint" "Taint value $taint" "A proprietary module or kernel fault may have tainted the kernel"
 		fi
+	fi
+
+	if [[ -r /proc/version ]]; then
+		emit_check boot info kernel-version "Kernel" "$(uname -sr 2>/dev/null || printf unknown)" "$(first_lines 1 </proc/version)"
 	fi
 }
 
@@ -776,8 +920,94 @@ trusted_system_helper() {
 	return 1
 }
 
+ensure_graphical_auth_env() {
+	# pkexec talks to mate-polkit over the session bus. Quickshell helpers
+	# sometimes inherit a stripped environ (e.g. qs restarted from SSH).
+	local uid runtime
+
+	uid=$(id -u)
+	runtime=${XDG_RUNTIME_DIR:-/run/user/$uid}
+	export XDG_RUNTIME_DIR=$runtime
+
+	if [[ -z ${DBUS_SESSION_BUS_ADDRESS:-} && -S $runtime/bus ]]; then
+		export DBUS_SESSION_BUS_ADDRESS=unix:path=$runtime/bus
+	fi
+	if [[ -z ${WAYLAND_DISPLAY:-} && -S $runtime/wayland-0 ]]; then
+		export WAYLAND_DISPLAY=wayland-0
+	fi
+	if [[ -z ${XDG_SESSION_TYPE:-} && -n ${WAYLAND_DISPLAY:-} ]]; then
+		export XDG_SESSION_TYPE=wayland
+	fi
+	if [[ -z ${MANGO_INSTANCE_SIGNATURE:-} ]]; then
+		local sock
+		sock=$(compgen -G "$runtime/mango-*.sock" | head -1 || true)
+		[[ -n $sock ]] && export MANGO_INSTANCE_SIGNATURE=$sock
+	fi
+}
+
+graphical_seat_session() {
+	# SESSION column for the seat0 graphical session (e.g. c1).
+	loginctl list-sessions --no-legend 2>/dev/null | awk '$4 ~ /^seat/ { print $1; exit }'
+}
+
+in_graphical_seat_session() {
+	local seat_session cg
+	seat_session=$(graphical_seat_session)
+	[[ -n $seat_session ]] || return 1
+	cg=$(</proc/self/cgroup 2>/dev/null || true)
+	[[ $cg == *"/session-${seat_session}.scope"* || $cg == *"/session-${seat_session}/"* ]]
+}
+
+run_pkexec_scan_system() {
+	# Runs pkexec helper scan-system; prints scan TSV on stdout; returns pkexec status.
+	local helper=$1
+	local pkexec_command=$2
+	local work status=1
+
+	if in_graphical_seat_session; then
+		set +e
+		"$pkexec_command" "$helper" scan-system
+		status=$?
+		set -e
+		return "$status"
+	fi
+
+	# qs restarted from SSH lands in a non-seat session; polkit then cannot use
+	# mate-polkit (exit 127). Spawn the elevated scan through mango so it runs
+	# inside session-c1 / seat0, and collect TSV via a temp file.
+	if [[ -z ${MANGO_INSTANCE_SIGNATURE:-} ]] || ! command -v mmsg >/dev/null 2>&1; then
+		printf 'elevated scan needs mango IPC (MANGO_INSTANCE_SIGNATURE) when Quickshell is outside the seat session\n' >&2
+		return 127
+	fi
+
+	work=$(mktemp -d)
+	# shellcheck disable=SC2064
+	trap 'rm -rf "$work"' RETURN
+
+	# Delay briefly so System Health can leave fullscreen before the dialog.
+	if ! mmsg dispatch spawn_shell,"sleep 0.4; $pkexec_command $(printf %q "$helper") scan-system >$(printf %q "$work/out") 2>$(printf %q "$work/err"); echo \$? >$(printf %q "$work/status")" >/dev/null; then
+		printf 'mmsg spawn for elevated scan failed\n' >&2
+		return 127
+	fi
+
+	local i
+	for i in $(seq 1 180); do
+		if [[ -f $work/status ]]; then
+			status=$(<"$work/status")
+			[[ -s $work/out ]] && cat "$work/out"
+			[[ -s $work/err ]] && cat "$work/err" >&2
+			return "$status"
+		fi
+		sleep 0.5
+	done
+	printf 'elevated scan timed out waiting for polkit/pkexec\n' >&2
+	return 124
+}
+
 scan_privileged() {
-	local helper sudo_command pkexec_command
+	local helper sudo_command pkexec_command pkexec_status
+
+	ensure_graphical_auth_env
 
 	if sudo_command=$(trusted_system_command sudo); then
 		if "$sudo_command" -n -v >/dev/null 2>&1; then
@@ -788,14 +1018,32 @@ scan_privileged() {
 
 	pkexec_command=$(trusted_system_command pkexec || true)
 	if [[ -z $pkexec_command ]]; then
-		emit_meta overview restricted scan-system "Privileged scan" "No authorization method available" "Install sudo or polkit, then refresh"
+		emit_meta overview info scan-system-skipped "Elevated diagnostics" "Skipped (no pkexec/sudo)" \
+			"Install polkit/sudo for SMART and system-service checks. Boot/journal already scanned as your user."
 		return 1
 	fi
 	if helper=$(trusted_system_helper); then
-		"$pkexec_command" "$helper" scan-system
-		return
+		set +e
+		run_pkexec_scan_system "$helper" "$pkexec_command"
+		pkexec_status=$?
+		set -e
+		if ((pkexec_status == 0)); then
+			return 0
+		fi
+		if ((pkexec_status == 127)); then
+			emit_meta overview info scan-system-skipped "Elevated diagnostics" "Skipped (polkit agent unreachable)" \
+				"pkexec exited 127. Quickshell must run in the graphical seat session (mango exec-once), or mate-polkit must be running. Log out/in if Elevated scan keeps failing."
+		elif ((pkexec_status == 124)); then
+			emit_meta overview info scan-system-skipped "Elevated diagnostics" "Skipped (timed out)" \
+				"No polkit response within 90s. Approve the password dialog if it is open, then try Elevated scan again."
+		else
+			emit_meta overview info scan-system-skipped "Elevated diagnostics" "Skipped (authorization cancelled)" \
+				"pkexec exited ${pkexec_status}. Approve the polkit password dialog (mate-polkit). Session scan already covers boot/journal."
+		fi
+		return 1
 	fi
-	emit_meta overview restricted scan-system "Privileged scan" "No trusted installed helper" "Run sudo make install-system, then refresh to request polkit authorization"
+	emit_meta overview info scan-system-skipped "Elevated diagnostics" "Skipped (helper not system-installed)" \
+		"Re-run ./install.sh to install /usr/local/bin/mango-titus-health for polkit. Boot/journal already scanned as your user."
 	return 1
 }
 

@@ -10,7 +10,7 @@ Scope {
     property bool editorAvailable: false
     property int selectedIndex: 0
     property int selectedWifiIndex: -1
-    property string statusText: "NET offline"
+    property string statusText: qsTr("NET offline")
     property string message: ""
     property string wifiPassword: ""
     property var devices: []
@@ -188,7 +188,7 @@ Scope {
                     break;
                 }
             }
-            root.message = "Enter the Wi-Fi password for " + network.ssid;
+            root.message = qsTr("Enter the Wi-Fi password for %1").arg(network.ssid);
             return;
         }
 
@@ -198,7 +198,7 @@ Scope {
         }
 
         root.busy = true;
-        root.message = "Connecting " + network.ssid;
+        root.message = qsTr("Connecting %1").arg(network.ssid);
         actionProcess.command = Commands.networkHelperCommand("wifi-connect", args);
         actionProcess.running = true;
     }
@@ -213,7 +213,7 @@ Scope {
         }
 
         root.busy = true;
-        root.message = "Connecting " + profile.name;
+        root.message = qsTr("Connecting %1").arg(profile.name);
         actionProcess.command = Commands.networkHelperCommand("connect", [profile.uuid]);
         actionProcess.running = true;
     }
@@ -224,7 +224,7 @@ Scope {
         }
 
         root.busy = true;
-        root.message = "Disconnecting " + device;
+        root.message = qsTr("Disconnecting %1").arg(device);
         actionProcess.command = Commands.networkHelperCommand("disconnect", [device]);
         actionProcess.running = true;
     }
@@ -247,7 +247,7 @@ Scope {
             onStreamFinished: {
                 const text = this.text.trim();
 
-                root.statusText = text.length > 0 ? text : "NET offline";
+                root.statusText = text.length > 0 ? text : qsTr("NET offline");
             }
         }
     }

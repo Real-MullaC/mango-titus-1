@@ -8,9 +8,9 @@ pragma ComponentBehavior: Bound
 FloatingWindow {
     id: root
 
-    required property var notificationModel
+    required property NotificationModel notificationModel
 
-    title: "dwm notification history"
+    title: qsTr("dwm notification history")
     visible: notificationModel.historyVisible
     implicitWidth: 520
     implicitHeight: 560
@@ -36,7 +36,7 @@ FloatingWindow {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Notifications"
+                    text: qsTr("Notifications")
                     color: Theme.text
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.titleFontSize
@@ -48,14 +48,14 @@ FloatingWindow {
                 ShellButton {
                     Layout.preferredWidth: 58
                     Layout.preferredHeight: Theme.buttonHeight
-                    label: "Clear"
+                    label: qsTr("Clear")
                     onActivated: root.notificationModel.clearHistory()
                 }
 
                 ShellButton {
                     Layout.preferredWidth: Theme.closeButtonSize
                     Layout.preferredHeight: Theme.closeButtonSize
-                    label: "x"
+                    label: qsTr("x")
                     onActivated: root.notificationModel.closeHistory()
                 }
             }
@@ -96,7 +96,7 @@ FloatingWindow {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: historyEntry.modelData.appName || "Notification"
+                                text: historyEntry.modelData.appName || qsTr("Notification")
                                 color: Theme.textMuted
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.smallFontSize
@@ -142,7 +142,7 @@ FloatingWindow {
                 Text {
                     anchors.centerIn: parent
                     visible: historyList.count === 0
-                    text: "No notifications"
+                    text: qsTr("No notifications")
                     color: Theme.textMuted
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.smallFontSize

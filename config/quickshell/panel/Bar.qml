@@ -1,7 +1,12 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs.controlcenter
+import qs.controls
 import qs.core
+import qs.network
+import qs.power
+import qs.state
 
 pragma ComponentBehavior: Bound
 
@@ -9,13 +14,13 @@ pragma ComponentBehavior: Bound
 PanelWindow {
     id: root
 
-    required property var state
-    required property var clock
-    required property var networkModel
-    required property var controlsModel
-    required property var bluetoothModel
-    required property var controlCenterModel
-    required property var powerMenuModel
+    required property WmState state
+    required property SystemClock clock
+    required property NetworkModel networkModel
+    required property ControlsModel controlsModel
+    required property BluetoothModel bluetoothModel
+    required property ControlCenterModel controlCenterModel
+    required property PowerMenuModel powerMenuModel
 
     implicitHeight: Theme.panelHeight
     color: Theme.transparent
@@ -58,7 +63,6 @@ PanelWindow {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, parent.width)
-                    height: parent.height
                     spacing: 6
 
                     LogoButton {
@@ -163,7 +167,29 @@ PanelWindow {
                         Layout.maximumWidth: 120
                         Layout.preferredHeight: Theme.pillHeight
                         active: root.controlsModel.visible
-                        hovered: controlsMouse.containsMouse
+                        hovered: volumeHover.hovered
+
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Volume")
+                        Accessible.onPressAction: root.controlsModel.toggle()
+                        activeFocusOnTab: true
+
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                root.controlsModel.toggle();
+                                event.accepted = true;
+                            }
+                        }
+
+                        HoverHandler {
+                            id: volumeHover
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: root.controlsModel.toggle()
+                        }
 
                         RowLayout {
                             id: volumeRow
@@ -186,17 +212,9 @@ PanelWindow {
                             }
 
                             UiText {
-                                text: root.controlsModel.volumeMuted ? "Muted" : root.controlsModel.volumePercent.toString() + "%"
+                                text: root.controlsModel.volumeMuted ? qsTr("Muted") : qsTr("%1%").arg(root.controlsModel.volumePercent)
                                 color: Theme.accentSecondary
                             }
-                        }
-
-                        MouseArea {
-                            id: controlsMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.controlsModel.toggle()
                         }
                     }
 
@@ -205,7 +223,29 @@ PanelWindow {
                         Layout.preferredWidth: bluetoothRow.implicitWidth + Theme.pillHorizontalPadding * 2
                         Layout.preferredHeight: Theme.pillHeight
                         active: root.bluetoothModel.visible
-                        hovered: bluetoothMouse.containsMouse
+                        hovered: bluetoothHover.hovered
+
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Bluetooth")
+                        Accessible.onPressAction: root.bluetoothModel.toggle()
+                        activeFocusOnTab: true
+
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                root.bluetoothModel.toggle();
+                                event.accepted = true;
+                            }
+                        }
+
+                        HoverHandler {
+                            id: bluetoothHover
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: root.bluetoothModel.toggle()
+                        }
 
                         RowLayout {
                             id: bluetoothRow
@@ -213,15 +253,7 @@ PanelWindow {
                             spacing: Theme.compactSpacing
 
                             IconText { text: "󰂯" }
-                            UiText { text: "BT" }
-                        }
-
-                        MouseArea {
-                            id: bluetoothMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.bluetoothModel.toggle()
+                            UiText { text: qsTr("BT") }
                         }
                     }
 
@@ -230,25 +262,39 @@ PanelWindow {
                         Layout.preferredWidth: networkRow.implicitWidth + Theme.pillHorizontalPadding * 2
                         Layout.preferredHeight: Theme.pillHeight
                         active: root.networkModel.visible
-                        hovered: networkMouse.containsMouse
+                        hovered: networkHover.hovered
+
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Network")
+                        Accessible.onPressAction: root.networkModel.toggle()
+                        activeFocusOnTab: true
+
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                root.networkModel.toggle();
+                                event.accepted = true;
+                            }
+                        }
+
+                        HoverHandler {
+                            id: networkHover
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: root.networkModel.toggle()
+                        }
 
                         RowLayout {
                             id: networkRow
                             anchors.centerIn: parent
                             spacing: Theme.compactSpacing
 
-                            UiText { text: "NET" }
+                            UiText { text: qsTr("NET") }
                             IconText {
                                 text: root.networkModel.networkOffline ? "󰤭" : "󰤨"
                             }
-                        }
-
-                        MouseArea {
-                            id: networkMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.networkModel.toggle()
                         }
                     }
 
@@ -257,20 +303,34 @@ PanelWindow {
                         Layout.preferredWidth: Theme.pillHeight
                         Layout.preferredHeight: Theme.pillHeight
                         active: root.powerMenuModel.visible
-                        hovered: powerMouse.containsMouse
+                        hovered: powerHover.hovered
+
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Power")
+                        Accessible.onPressAction: root.powerMenuModel.toggle()
+                        activeFocusOnTab: true
+
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                root.powerMenuModel.toggle();
+                                event.accepted = true;
+                            }
+                        }
+
+                        HoverHandler {
+                            id: powerHover
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: root.powerMenuModel.toggle()
+                        }
 
                         IconText {
                             anchors.centerIn: parent
                             text: "󰐥"
                             color: Theme.accentSecondary
-                        }
-
-                        MouseArea {
-                            id: powerMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.powerMenuModel.toggle()
                         }
                     }
                 }

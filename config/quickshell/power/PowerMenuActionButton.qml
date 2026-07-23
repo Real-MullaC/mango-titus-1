@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import qs.core
 
@@ -10,6 +12,11 @@ Rectangle {
 
     signal activated
 
+    Accessible.role: Accessible.Button
+    Accessible.name: root.action ? root.action.label : ""
+    Accessible.onPressAction: root.activated()
+    activeFocusOnTab: true
+
     implicitWidth: Math.max(120, labelColumn.implicitWidth + (root.compact ? 24 : 28))
     implicitHeight: root.compact
         ? Theme.confirmButtonHeight
@@ -19,8 +26,17 @@ Rectangle {
     border.color: danger ? Theme.danger : Theme.border
     border.width: 1
 
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.activated();
+            event.accepted = true;
+        }
+    }
+
     HoverHandler {
         id: actionHover
+
+        cursorShape: Qt.PointingHandCursor
     }
 
     TapHandler {

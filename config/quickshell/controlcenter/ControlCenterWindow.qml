@@ -2,23 +2,25 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.core
+import qs.health
+import qs.power
 
 pragma ComponentBehavior: Bound
 
 PopupWindow {
     id: root
 
-    required property var controlCenterModel
-    required property var healthModel
-    required property var panelWindow
-    required property var powerMenuModel
+    required property ControlCenterModel controlCenterModel
+    required property SystemHealthModel healthModel
+    required property PanelWindow panelWindow
+    required property PowerMenuModel powerMenuModel
 
     readonly property int cardWidth: 276
     readonly property int gap: 8
     property string sidePanel: "none"
-    readonly property string sideTitleText: sidePanel === "utilities" ? "Utilities"
-        : sidePanel === "actions" ? "Quick Actions"
-        : "Widgets"
+    readonly property string sideTitleText: sidePanel === "utilities" ? qsTr("Utilities")
+        : sidePanel === "actions" ? qsTr("Quick Actions")
+        : qsTr("Widgets")
 
     function openSystemHealth() {
         root.controlCenterModel.close();
@@ -62,26 +64,47 @@ PopupWindow {
         property bool active: false
         signal activated()
 
+        Accessible.role: Accessible.Button
+        Accessible.name: tile.label
+        Accessible.onPressAction: {
+            if (tile.enabled)
+                tile.activated();
+        }
+        activeFocusOnTab: true
+
         implicitHeight: 26
-        opacity: enabled ? 1 : 0.5
         radius: Theme.smallRadius
-        color: active ? Theme.surfaceActive : (tileMouse.containsMouse ? Theme.surfaceHover : Theme.surface)
-        border.color: active || tileMouse.containsMouse ? Theme.accentSecondary : Theme.border
+        color: active ? Theme.surfaceActive : (tileHover.hovered ? Theme.surfaceHover : Theme.surface)
+        border.color: !tile.enabled ? Theme.border
+            : (active || tileHover.hovered ? Theme.accentSecondary : Theme.border)
         border.width: Theme.pillBorderWidth
+
+        Keys.onPressed: function(event) {
+            if (!tile.enabled)
+                return;
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                tile.activated();
+                event.accepted = true;
+            }
+        }
+
+        HoverHandler {
+            id: tileHover
+            enabled: tile.enabled
+            cursorShape: tile.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+
+        TapHandler {
+            enabled: tile.enabled
+            acceptedButtons: Qt.LeftButton
+            onTapped: tile.activated()
+        }
 
         UiText {
             anchors.centerIn: parent
             text: tile.label
-            color: tile.active || tileMouse.containsMouse ? Theme.accentSecondary : Theme.text
-        }
-
-        MouseArea {
-            id: tileMouse
-            anchors.fill: parent
-            enabled: tile.enabled
-            hoverEnabled: true
-            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: tile.activated()
+            color: !tile.enabled ? Theme.textMuted
+                : (tile.active || tileHover.hovered ? Theme.accentSecondary : Theme.text)
         }
     }
 
@@ -116,21 +139,35 @@ PopupWindow {
 
                     UiText {
                         Layout.fillWidth: true
-                        text: "Control"
+                        text: qsTr("Control")
                         color: Theme.textStrong
                         font.letterSpacing: 2
                     }
 
                     UiText {
-                        text: "x"
-                        color: closeMouse.containsMouse ? Theme.accent : Theme.textMuted
+                        text: qsTr("x")
+                        color: closeHover.hovered ? Theme.accent : Theme.textMuted
 
-                        MouseArea {
-                            id: closeMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Close")
+                        Accessible.onPressAction: root.controlCenterModel.dismissMenu()
+                        activeFocusOnTab: true
+
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                root.controlCenterModel.dismissMenu();
+                                event.accepted = true;
+                            }
+                        }
+
+                        HoverHandler {
+                            id: closeHover
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.controlCenterModel.dismissMenu()
+                        }
+
+                        TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: root.controlCenterModel.dismissMenu()
                         }
                     }
                 }
@@ -145,22 +182,22 @@ PopupWindow {
 
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
 
-                UiText { text: "Actions"; color: Theme.textMuted; font.letterSpacing: 1 }
+                UiText { text: qsTr("Actions"); color: Theme.textMuted; font.letterSpacing: 1 }
                 Tile {
                     Layout.fillWidth: true
-                    label: "Reload QS-Config"
+                    label: qsTr("Reload QS-Config")
                     enabled: !root.controlCenterModel.busy
                     onActivated: root.controlCenterModel.runAction("restart-quickshell")
                 }
                 Tile {
                     Layout.fillWidth: true
-                    label: root.sidePanel === "actions" ? "Quick Actions  <" : "Quick Actions  >"
+                    label: root.sidePanel === "actions" ? qsTr("Quick Actions  <") : qsTr("Quick Actions  >")
                     active: root.sidePanel === "actions"
                     onActivated: root.toggleSidePanel("actions")
                 }
                 Tile {
                     Layout.fillWidth: true
-                    label: "Power  >"
+                    label: qsTr("Power  >")
                     onActivated: {
                         root.controlCenterModel.close();
                         root.powerMenuModel.open();
@@ -168,19 +205,19 @@ PopupWindow {
                 }
 
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
-                UiText { text: "Bar Functions"; color: Theme.textMuted; font.letterSpacing: 1 }
+                UiText { text: qsTr("Bar Functions"); color: Theme.textMuted; font.letterSpacing: 1 }
                 Tile {
                     Layout.fillWidth: true
-                    label: root.sidePanel === "widgets" ? "Bar Functions  <" : "Bar Functions  >"
+                    label: root.sidePanel === "widgets" ? qsTr("Bar Functions  <") : qsTr("Bar Functions  >")
                     active: root.sidePanel === "widgets"
                     onActivated: root.toggleSidePanel("widgets")
                 }
 
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
-                UiText { text: "Utilities"; color: Theme.textMuted; font.letterSpacing: 1 }
+                UiText { text: qsTr("Utilities"); color: Theme.textMuted; font.letterSpacing: 1 }
                 Tile {
                     Layout.fillWidth: true
-                    label: root.sidePanel === "utilities" ? "Utilities  <" : "Utilities  >"
+                    label: root.sidePanel === "utilities" ? qsTr("Utilities  <") : qsTr("Utilities  >")
                     active: root.sidePanel === "utilities"
                     onActivated: root.toggleSidePanel("utilities")
                 }
@@ -235,7 +272,7 @@ PopupWindow {
                 delegate: Tile {
                     required property string modelData
                     Layout.fillWidth: true
-                    label: modelData
+                    label: qsTr(modelData)
                     active: root.controlCenterModel.widgetEnabled(modelData)
                     onActivated: root.controlCenterModel.toggleWidget(modelData)
                 }
@@ -252,27 +289,27 @@ PopupWindow {
 
             Tile {
                 Layout.fillWidth: true
-                label: "System Health  >"
+                label: qsTr("System Health  >")
                 onActivated: root.openSystemHealth()
             }
             Tile {
                 Layout.fillWidth: true
-                label: "Appearance  >"
+                label: qsTr("Appearance  >")
                 onActivated: root.controlCenterModel.openAppearance()
             }
             Tile {
                 Layout.fillWidth: true
-                label: "Keybinds  >"
+                label: qsTr("Keybinds  >")
                 onActivated: root.controlCenterModel.openKeybinds()
             }
             Tile {
                 Layout.fillWidth: true
-                label: "Power Settings  >"
+                label: qsTr("Power Settings  >")
                 onActivated: root.controlCenterModel.openPower()
             }
             Tile {
                 Layout.fillWidth: true
-                label: "System Info  >"
+                label: qsTr("System Info  >")
                 onActivated: root.controlCenterModel.openInfo()
             }
         }

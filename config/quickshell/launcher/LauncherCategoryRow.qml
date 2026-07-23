@@ -7,7 +7,7 @@ pragma ComponentBehavior: Bound
 Flickable {
     id: root
 
-    required property var launcherModel
+    required property LauncherModel launcherModel
 
     contentWidth: launcherCategoryRow.width
     contentHeight: height
@@ -31,14 +31,27 @@ Flickable {
                 readonly property bool selected: root.launcherModel.category === categoryDelegate.modelData.id
                 readonly property bool hovered: categoryHover.hovered
 
+                Accessible.role: Accessible.Button
+                Accessible.name: categoryDelegate.modelData.label
+                Accessible.onPressAction: root.launcherModel.setCategory(categoryDelegate.modelData.id)
+                activeFocusOnTab: true
+
                 Layout.preferredHeight: Theme.chipHeight
                 Layout.preferredWidth: launcherCategoryLabel.implicitWidth + 22
                 radius: Theme.radius
                 color: categoryDelegate.selected ? Theme.accent
                     : categoryDelegate.hovered ? Theme.surfaceHover : Theme.surface
 
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                        root.launcherModel.setCategory(categoryDelegate.modelData.id);
+                        event.accepted = true;
+                    }
+                }
+
                 HoverHandler {
                     id: categoryHover
+                    cursorShape: Qt.PointingHandCursor
                 }
 
                 TapHandler {
@@ -51,7 +64,7 @@ Flickable {
                     id: launcherCategoryLabel
 
                     anchors.centerIn: parent
-                    text: categoryDelegate.modelData.label + " " + categoryDelegate.modelData.count
+                    text: qsTr("%1 %2").arg(categoryDelegate.modelData.label).arg(categoryDelegate.modelData.count)
                     color: categoryDelegate.selected ? Theme.accentText : Theme.text
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.smallFontSize

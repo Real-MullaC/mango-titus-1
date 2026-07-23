@@ -69,7 +69,7 @@ Scope {
         const item = {
             "key": notification.id + "-" + root.sequence,
             "notification": notification,
-            "appName": notification.appName || "Notification",
+            "appName": notification.appName || qsTr("Notification"),
             "summary": notification.summary || "",
             "body": notification.body || "",
             "urgency": notification.urgency,
@@ -118,6 +118,7 @@ Scope {
     function clear() {
         const current = root.notifications.slice();
         for (const item of current) {
+            root.releaseItem(item);
             if (item && item.notification) {
                 item.notification.dismiss();
             }
@@ -172,16 +173,22 @@ Scope {
 
     function dismiss(key) {
         const item = root.notifications.find(n => n.key === key);
-        if (item && item.notification) {
-            item.notification.dismiss();
+        if (item) {
+            root.releaseItem(item);
+            if (item.notification) {
+                item.notification.dismiss();
+            }
         }
         root.remove(key);
     }
 
     function expire(key) {
         const item = root.notifications.find(n => n.key === key);
-        if (item && item.notification) {
-            item.notification.expire();
+        if (item) {
+            root.releaseItem(item);
+            if (item.notification) {
+                item.notification.expire();
+            }
         }
         root.remove(key);
     }

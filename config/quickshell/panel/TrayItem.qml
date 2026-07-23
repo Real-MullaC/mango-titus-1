@@ -1,17 +1,27 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Services.SystemTray
 import Quickshell.Widgets
 import qs.core
 
 Item {
     id: root
 
-    required property var trayItem
+    required property SystemTrayItem trayItem
 
     readonly property string iconKey: trayItem ? (trayItem.icon || "") : ""
     property var iconSources: []
     property int iconSourceIndex: 0
+
+    Accessible.role: Accessible.Button
+    Accessible.name: {
+        if (!root.trayItem)
+            return qsTr("Tray item");
+        return root.trayItem.tooltipTitle || root.trayItem.title || root.trayItem.id || qsTr("Tray item");
+    }
+    Accessible.onPressAction: root.handleClick(Qt.LeftButton)
+    activeFocusOnTab: true
 
     function rebuildIconSources() {
         root.iconSources = Icons.trayIconSources(root.trayItem);
@@ -42,10 +52,20 @@ Item {
     Layout.preferredWidth: Theme.trayItemSize
     Layout.preferredHeight: Theme.trayItemSize
 
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.handleClick(Qt.LeftButton);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier)) {
+            root.openContextMenu();
+            event.accepted = true;
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: Theme.smallRadius
-        color: trayMouse.containsMouse ? Theme.surfaceHover : Theme.transparent
+        color: trayHover.hovered ? Theme.surfaceHover : Theme.transparent
     }
 
     QsMenuAnchor {
@@ -88,25 +108,21 @@ Item {
         textFormat: Text.PlainText
     }
 
-    MouseArea {
-        id: trayMouse
+    HoverHandler {
+        id: trayHover
 
-        anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
+    }
 
-        onPressed: mouse => {
-            if (mouse.button === Qt.RightButton) {
-                root.openContextMenu();
-                mouse.accepted = true;
-            }
+    TapHandler {
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        onTapped: function(eventPoint, button) {
+            root.handleClick(button);
         }
+    }
 
-        onClicked: mouse => {
-            if (mouse.button !== Qt.RightButton) {
-                root.handleClick(mouse.button);
-            }
-        }
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: root.openContextMenu()
     }
 }

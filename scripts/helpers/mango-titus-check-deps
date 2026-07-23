@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# mango-titus dependency checker (product-specific — not shared with dwm's check-deps.sh)
+# Exit 0 = ok, 1 = missing required deps. Safe for Quick Actions (non-interactive).
+set -euo pipefail
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+NC=$'\033[0m'
+
+MISSING=0
+MISSING_LIST=()
+
+have_cmd() {
+	command -v "$1" >/dev/null 2>&1
+}
+
+check_cmd() {
+	local name=$1
+	local required=${2:-1}
+
+	if have_cmd "$name"; then
+		printf "  ${GREEN}✓${NC} %s\n" "$name"
+		return 0
+	fi
+
+	if [[ $required -eq 1 ]]; then
+		printf "  ${RED}✗${NC} %s ${YELLOW}(missing)${NC}\n" "$name"
+		MISSING=$((MISSING + 1))
+		MISSING_LIST+=("$name")
+	else
+		printf "  ${YELLOW}○${NC} %s ${YELLOW}(optional)${NC}\n" "$name"
+	fi
+}
+
+check_any() {
+	local label=$1
+	shift
+	local cmd
+	for cmd in "$@"; do
+		if have_cmd "$cmd"; then
+			printf "  ${GREEN}✓${NC} %s (%s)\n" "$label" "$cmd"
+			return 0
+		fi
+	done
+	printf "  ${RED}✗${NC} %s ${YELLOW}(need one of: %s)${NC}\n" "$label" "$*"
+	MISSING=$((MISSING + 1))
+	MISSING_LIST+=("$label")
+}
+
+check_path() {
+	local label=$1
+	local path=$2
+	if [[ -e $path ]]; then
+		printf "  ${GREEN}✓${NC} %s\n" "$label"
+	else
+		printf "  ${RED}✗${NC} %s ${YELLOW}(missing: %s)${NC}\n" "$label" "$path"
+		MISSING=$((MISSING + 1))
+		MISSING_LIST+=("$label")
+	fi
+}
+
+quiet=0
+if [[ ${1:-} == --quiet || ${1:-} == -q ]]; then
+	quiet=1
+fi
+
+emit() {
+	if [[ $quiet -eq 0 ]]; then
+		printf '%s\n' "$@"
+	fi
+}
+
+emit "═══ mango-titus Dependency Check ═══"
+emit ""
+
+emit "Compositor / shell:"
+check_any "mangowm" mango mangowm
+check_any "Quickshell" qs quickshell
+check_any "wallpaper daemon" awww swww
+emit ""
+
+emit "Lock / idle:"
+check_cmd swayidle
+check_any "swaylock" swaylock swaylock-effects
+emit ""
+
+emit "Desktop glue:"
+check_cmd nmcli
+check_cmd notify-send 0
+check_cmd brightnessctl 0
+check_cmd playerctl 0
+check_cmd pactl 0
+check_cmd flameshot 0
+check_cmd wl-copy 0
+check_cmd cliphist 0
+emit ""
+
+emit "Portals (screenshots / screencast):"
+check_cmd xdg-desktop-portal 0
+# portal binaries vary; check common units/files lightly
+if [[ -d /usr/lib/xdg-desktop-portal || -d /usr/libexec/xdg-desktop-portal ]]; then
+	[[ $quiet -eq 0 ]] && printf "  ${GREEN}✓${NC} xdg-desktop-portal files\n"
+else
+	[[ $quiet -eq 0 ]] && printf "  ${YELLOW}○${NC} xdg-desktop-portal files ${YELLOW}(optional check)${NC}\n"
+fi
+emit ""
+
+emit "Terminals (at least one):"
+check_any "terminal" alacritty kitty ghostty foot xterm
+emit ""
+
+emit "mango-titus helpers:"
+data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/mango-titus/scripts"
+for helper in mango-titus-cc mango-titus-state mango-titus-network mango-titus-terminal mango-titus-health; do
+	if have_cmd "$helper" || [[ -x $data_dir/$helper ]]; then
+		[[ $quiet -eq 0 ]] && printf "  ${GREEN}✓${NC} %s\n" "$helper"
+	else
+		[[ $quiet -eq 0 ]] && printf "  ${RED}✗${NC} %s ${YELLOW}(missing)${NC}\n" "$helper"
+		MISSING=$((MISSING + 1))
+		MISSING_LIST+=("$helper")
+	fi
+done
+emit ""
+
+emit "Session:"
+check_path "mango-titus config" "${XDG_CONFIG_HOME:-$HOME/.config}/mango-titus/config.conf"
+check_path "Quickshell shell" "${XDG_CONFIG_HOME:-$HOME/.config}/mango-titus/quickshell/shell.qml"
+if [[ -f /usr/share/wayland-sessions/mango-titus.desktop || -f /usr/local/share/wayland-sessions/mango-titus.desktop ]]; then
+	[[ $quiet -eq 0 ]] && printf "  ${GREEN}✓${NC} mango-titus.desktop\n"
+else
+	[[ $quiet -eq 0 ]] && printf "  ${YELLOW}○${NC} mango-titus.desktop ${YELLOW}(not in system sessions yet)${NC}\n"
+fi
+emit ""
+
+# Machine-readable summary line for mango-titus-cc
+if [[ $MISSING -eq 0 ]]; then
+	[[ $quiet -eq 0 ]] && printf "${GREEN}All required dependencies satisfied.${NC}\n"
+	printf 'dependency-check\tok\n'
+	exit 0
+fi
+
+[[ $quiet -eq 0 ]] && printf "${RED}%s missing required dependency/dependencies.${NC}\n" "$MISSING"
+[[ $quiet -eq 0 ]] && printf '  Missing: %s\n' "${MISSING_LIST[*]}"
+[[ $quiet -eq 0 ]] && printf '  Run: ./install.sh --profile recommended\n'
+printf 'dependency-check\tmissing\t%s\n' "${MISSING_LIST[*]}"
+exit 1

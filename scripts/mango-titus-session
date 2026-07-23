@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# mango-titus Wayland session entry — never uses stock ~/.config/mango
+set -euo pipefail
+
+config="${XDG_CONFIG_HOME:-$HOME/.config}/mango-titus/config.conf"
+if [[ ! -f $config ]]; then
+	echo "mango-titus-session: missing $config" >&2
+	exit 1
+fi
+
+# Display managers use a minimal PATH; qs children need helpers + shared tools.
+local_bin="${HOME}/.local/bin"
+data_scripts="${XDG_DATA_HOME:-$HOME/.local/share}/mango-titus/scripts"
+case ":${PATH:-}:" in
+*":${local_bin}:"*) ;;
+*) PATH="${local_bin}:${PATH:-/usr/bin:/bin}" ;;
+esac
+case ":${PATH}:" in
+*":${data_scripts}:"*) ;;
+*) PATH="${data_scripts}:${PATH}" ;;
+esac
+export PATH
+
+exec mango -c "$config"

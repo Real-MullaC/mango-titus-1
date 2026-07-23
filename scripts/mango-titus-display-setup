@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Multi-monitor wizard/helpers for mangowm (wlr-randr). Scripts own UX — not Quickshell.
+set -euo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage:
+  mango-titus-display-setup              # list outputs (detect)
+  mango-titus-display-setup detect
+  mango-titus-display-setup wizard       # interactive apply via wlr-randr
+  mango-titus-display-setup status
+
+Profiles: use mango-titus-display-profile (named layouts under ~/.config/mango-titus/display-profiles/).
+EOF
+}
+
+need_wlr() {
+	command -v wlr-randr >/dev/null 2>&1 || {
+		printf 'mango-titus-display-setup: wlr-randr is required\n' >&2
+		return 1
+	}
+}
+
+cmd_detect() {
+	need_wlr
+	wlr-randr
+}
+
+cmd_status() {
+	need_wlr
+	printf 'Current outputs (wlr-randr):\n'
+	wlr-randr
+	if command -v mmsg >/dev/null 2>&1; then
+		printf '\nTip: mmsg dispatch sleep_monitor,<NAME> / wakeup_monitor,<NAME>\n'
+	fi
+}
+
+cmd_wizard() {
+	need_wlr
+	mapfile -t outputs < <(wlr-randr 2>/dev/null | awk '/^[^ ]/ { print $1 }')
+	if ((${#outputs[@]} == 0)); then
+		printf 'No outputs detected. Is mangowm running?\n' >&2
+		return 1
+	fi
+
+	printf 'Connected outputs:\n'
+	local i=0
+	for o in "${outputs[@]}"; do
+		printf '  [%d] %s\n' "$i" "$o"
+		i=$((i + 1))
+	done
+
+	read -r -p "Primary output name [${outputs[0]}]: " primary
+	primary=${primary:-${outputs[0]}}
+
+	printf 'Applying: %s as preferred/on (others unchanged).\n' "$primary"
+	# Minimal safe apply — full mode/pos editing can extend this later
+	wlr-randr --output "$primary" --on || true
+	printf 'Done. Save a profile with: mango-titus-display-profile template\n'
+	printf 'Edit ~/.config/mango-titus/display-profiles/ and: mango-titus-display-profile apply <name>\n'
+}
+
+case "${1:-detect}" in
+-h | --help) usage ;;
+detect | "") cmd_detect ;;
+status) cmd_status ;;
+wizard) cmd_wizard ;;
+*)
+	usage >&2
+	exit 1
+	;;
+esac

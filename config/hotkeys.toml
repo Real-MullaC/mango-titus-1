@@ -1,0 +1,33 @@
+# mango-titus — keybind reference for Quickshell Control Center.
+# Live compositor binds: ~/.config/mango-titus/bind.conf
+# Shared spawn targets (webapp-launch, protonrestart, systemctl) match dwm-titus.
+
+[keys]
+entries = [
+  { mod="SUPER",            key="r",       desc="App launcher",            func="spawn" },
+  { mod="SUPER",            key="x",       desc="Terminal",                func="spawn" },
+  { mod="SUPER",            key="e",       desc="File manager (Thunar)",   func="spawn" },
+  { mod="SUPER",            key="w",       desc="Looking Glass (VM)",      func="spawn" },
+  { mod="SUPER",            key="b",       desc="Firefox",                 func="spawn" },
+  { mod="SUPER SHIFT",      key="w",       desc="Randomize wallpaper",     func="spawn" },
+  { mod="SUPER",            key="a",       desc="ChatGPT (webapp-launch)", func="spawn" },
+  { mod="SUPER SHIFT",      key="a",       desc="Gemini (webapp-launch)",  func="spawn" },
+  { mod="SUPER SHIFT",      key="x",       desc="X compose (webapp-launch)", func="spawn" },
+  { mod="SUPER",            key="p",       desc="Screenshot (fullscreen)", func="spawn" },
+  { mod="SUPER SHIFT",      key="p",       desc="Screenshot area → file",  func="spawn" },
+  { mod="SUPER CTRL",       key="p",       desc="Screenshot area → clip",  func="spawn" },
+  { mod="SUPER",            key="F1",      desc="Control center",          func="spawn" },
+  { mod="SUPER ALT",        key="F1",      desc="Control center",          func="spawn" },
+  { mod="SUPER",            key="slash",   desc="Keybinds cheatsheet",     func="spawn" },
+  { mod="SUPER SHIFT",      key="r",       desc="Restart Quickshell",      func="spawn" },
+  { mod="SUPER CTRL SHIFT", key="c",       desc="Reload mango config",     func="spawn" },
+  { mod="SUPER SHIFT",      key="t",       desc="GTK theme (nwg-look)",    func="spawn" },
+  { mod="SUPER",            key="v",       desc="Clipboard history",       func="spawn" },
+  { mod="SUPER ALT",        key="l",       desc="Lock screen",             func="spawn" },
+  { mod="SUPER CTRL",       key="q",       desc="Power menu",              func="spawn" },
+  { mod="SUPER CTRL",       key="r",       desc="protonrestart",           func="spawn" },
+  { mod="SUPER CTRL SHIFT", key="r",       desc="Reboot",                  func="spawn" },
+  { mod="SUPER CTRL SHIFT", key="s",       desc="Suspend",                 func="spawn" },
+  { mod="SUPER CTRL SHIFT", key="q",       desc="Quit mangowm",            func="quit" },
+  { mod="SUPER",            key="q",       desc="Close window",            func="killclient" },
+]

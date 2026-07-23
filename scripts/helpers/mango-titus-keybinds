@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+config=${XDG_CONFIG_HOME:-$HOME/.config}/mango-titus/quickshell/shell.qml
+[ -f "$config" ] || {
+	printf 'mango-titus Quickshell config missing: %s\n' "$config" >&2
+	exit 1
+}
+
+exec quickshell ipc --path "$config" call controlcenter openKeybinds

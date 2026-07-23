@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Mango Titus
+Comment=mango-titus Wayland session
+Exec=/usr/local/bin/mango-titus-session
+Type=Application
+DesktopNames=mango-titus

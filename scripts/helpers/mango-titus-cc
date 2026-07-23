@@ -1,0 +1,933 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(
+	unset CDPATH
+	cd -- "$(dirname -- "$0")" && pwd
+)
+# Installed: .../mango-titus/scripts/<helper>
+# Dev tree:  .../mango-titus/scripts/helpers/<helper>
+if [ -f "$script_dir/../config/themes.toml" ]; then
+	repo_dir=$(cd -- "$script_dir/.." && pwd)
+elif [ -f "$script_dir/../../config/themes.toml" ]; then
+	repo_dir=$(cd -- "$script_dir/../.." && pwd)
+else
+	repo_dir=$(cd -- "$script_dir/.." && pwd)
+fi
+
+config_home=${XDG_CONFIG_HOME:-${HOME:-}/.config}
+product_config_dir=$config_home/mango-titus
+mango_data=${XDG_DATA_HOME:-${HOME:-}/.local/share}/mango-titus
+
+config_file() {
+	name=$1
+	if [ -f "$product_config_dir/$name" ]; then
+		printf '%s\n' "$product_config_dir/$name"
+	elif [ -f "$mango_data/config/$name" ]; then
+		printf '%s\n' "$mango_data/config/$name"
+	else
+		printf '%s\n' "$repo_dir/config/$name"
+	fi
+}
+
+power_config_file=$product_config_dir/power.conf
+
+is_uint() {
+	case ${1:-} in
+	"" | *[!0123456789]*) return 1 ;;
+	*) return 0 ;;
+	esac
+}
+
+strip_space() {
+	printf '%s' "$1" | tr -d '[:space:]'
+}
+
+normalize_seconds() {
+	power_value=${1:-}
+	power_fallback=${2:-600}
+
+	if ! is_uint "$power_value"; then
+		power_value=$power_fallback
+	fi
+	if [ "$power_value" -lt 60 ]; then
+		power_value=60
+	fi
+	if [ "$power_value" -gt 86400 ]; then
+		power_value=86400
+	fi
+
+	printf '%s\n' "$power_value"
+}
+
+power_bool() {
+	case $(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]') in
+	1 | true | yes | on | enabled) printf '1\n' ;;
+	*) printf '0\n' ;;
+	esac
+}
+
+read_power_config() {
+	# mangowm defaults: lock on @ 300s, monitor sleep off (opt-in)
+	power_dpms_enabled=0
+	power_dpms_timeout=600
+	power_lock_enabled=1
+	power_lock_managed=0
+	power_lock_timeout=300
+	power_lock_after=5
+	power_config_managed=0
+
+	[ -r "$power_config_file" ] || return 0
+	power_config_managed=1
+
+	while IFS='=' read -r power_key power_value || [ -n "$power_key" ]; do
+		power_key=$(strip_space "$power_key")
+		case $power_key in
+		"" | \#*) continue ;;
+		esac
+
+		power_value=${power_value%%#*}
+		power_value=$(strip_space "$power_value")
+
+		case $power_key in
+		dpms_enabled) power_dpms_enabled=$(power_bool "$power_value") ;;
+		dpms_timeout) power_dpms_timeout=$(normalize_seconds "$power_value" "$power_dpms_timeout") ;;
+		lock_enabled) power_lock_enabled=$(power_bool "$power_value") ;;
+		lock_managed) power_lock_managed=$(power_bool "$power_value") ;;
+		lock_timeout) power_lock_timeout=$(normalize_seconds "$power_value" "$power_lock_timeout") ;;
+		lock_after)
+			if is_uint "$power_value" && [ "$power_value" -le 3600 ]; then
+				power_lock_after=$power_value
+			fi
+			;;
+		esac
+	done <"$power_config_file"
+}
+
+write_power_config() {
+	mkdir -p "$product_config_dir"
+	power_tmp=$(mktemp "${TMPDIR:-/tmp}/dwm-power.XXXXXX")
+	{
+		printf '%s\n' '# mango-titus power settings (read by idle.sh)'
+		printf 'dpms_enabled=%s\n' "$power_dpms_enabled"
+		printf 'dpms_timeout=%s\n' "$power_dpms_timeout"
+		printf 'lock_enabled=%s\n' "$power_lock_enabled"
+		printf 'lock_managed=%s\n' "$power_lock_managed"
+		printf 'lock_timeout=%s\n' "$power_lock_timeout"
+		printf 'lock_after=%s\n' "$power_lock_after"
+	} >"$power_tmp"
+	mv "$power_tmp" "$power_config_file"
+	power_config_managed=1
+}
+
+start_configured_light_locker() {
+	command -v light-locker >/dev/null 2>&1 || return 0
+
+	if command -v pgrep >/dev/null 2>&1 &&
+		pgrep -u "$(id -u)" -x light-locker >/dev/null 2>&1; then
+		return 0
+	fi
+
+	light-locker >/dev/null 2>&1 &
+}
+
+stop_configured_light_locker() {
+	command -v pgrep >/dev/null 2>&1 || return 0
+	command -v pkill >/dev/null 2>&1 || return 0
+
+	if pgrep -u "$(id -u)" -x light-locker >/dev/null 2>&1; then
+		pkill -u "$(id -u)" -x light-locker
+	fi
+}
+
+mango_idle_script() {
+	if [ -x "$product_config_dir/scripts/idle.sh" ]; then
+		printf '%s\n' "$product_config_dir/scripts/idle.sh"
+	elif [ -x "$mango_data/scripts/idle.sh" ]; then
+		printf '%s\n' "$mango_data/scripts/idle.sh"
+	else
+		return 1
+	fi
+}
+
+mango_lock_script() {
+	if [ -x "$product_config_dir/scripts/lock.sh" ]; then
+		printf '%s\n' "$product_config_dir/scripts/lock.sh"
+	else
+		return 1
+	fi
+}
+
+mango_monitor_sleep_script() {
+	if [ -x "$product_config_dir/scripts/monitor-sleep.sh" ]; then
+		printf '%s\n' "$product_config_dir/scripts/monitor-sleep.sh"
+	else
+		return 1
+	fi
+}
+
+power_use_mango_idle() {
+	# Wayland mangowm path: swayidle + lock.sh (+ optional monitor-sleep via mmsg)
+	mango_lock_script >/dev/null 2>&1 || return 1
+	command -v swayidle >/dev/null 2>&1 || return 1
+	return 0
+}
+
+power_restart_idle() {
+	idle_sh=$(mango_idle_script) || return 1
+	if command -v pkill >/dev/null 2>&1; then
+		pkill -u "$(id -u)" -x swayidle 2>/dev/null || true
+	fi
+	# Restart idle daemon in the user session
+	nohup "$idle_sh" >/dev/null 2>&1 &
+	return 0
+}
+
+power_apply_dpms_settings() {
+	if power_use_mango_idle; then
+		# Monitor sleep is applied by idle.sh reading power.conf
+		power_restart_idle
+		return $?
+	fi
+
+	command -v xset >/dev/null 2>&1 || return 1
+
+	if [ "$power_dpms_enabled" = 1 ]; then
+		xset +dpms
+		xset dpms "$power_dpms_timeout" "$power_dpms_timeout" "$power_dpms_timeout"
+	else
+		xset -dpms
+	fi
+}
+
+power_apply_lock_settings() {
+	if power_use_mango_idle; then
+		power_restart_idle
+		return $?
+	fi
+
+	power_status=0
+
+	if command -v xset >/dev/null 2>&1; then
+		if [ "$power_lock_enabled" = 1 ]; then
+			xset s "$power_lock_timeout"
+		else
+			xset s off
+			xset s noblank
+		fi
+	else
+		power_status=1
+	fi
+
+	if [ "$power_lock_enabled" = 1 ]; then
+		if command -v light-locker >/dev/null 2>&1 &&
+			command -v gsettings >/dev/null 2>&1 &&
+			gsettings set apps.light-locker lock-after-screensaver "$power_lock_after" &&
+			gsettings set apps.light-locker lock-on-suspend true; then
+			start_configured_light_locker
+		else
+			power_status=1
+		fi
+	elif { [ "${power_config_managed:-0}" = 1 ] || [ "${power_lock_managed:-0}" = 1 ]; } &&
+		command -v gsettings >/dev/null 2>&1; then
+		if ! gsettings set apps.light-locker lock-after-screensaver 0 ||
+			! gsettings set apps.light-locker lock-on-suspend false; then
+			power_status=1
+		fi
+	fi
+
+	if [ "$power_lock_enabled" = 0 ] &&
+		{ [ "${power_config_managed:-0}" = 1 ] || [ "${power_lock_managed:-0}" = 1 ]; }; then
+		stop_configured_light_locker || power_status=1
+	fi
+
+	return "$power_status"
+}
+
+power_apply() {
+	read_power_config
+	power_status=0
+	power_apply_dpms_settings || power_status=1
+	power_apply_lock_settings || power_status=1
+	return "$power_status"
+}
+
+power_status() {
+	read_power_config
+
+	power_dpms_available=0
+	power_live_dpms_enabled=$power_dpms_enabled
+	power_live_dpms_timeout=$power_dpms_timeout
+	power_live_lock_timeout=$power_lock_timeout
+	power_live_lock_enabled=$power_lock_enabled
+	power_live_lock_after=$power_lock_after
+	power_lock_available=0
+	power_lock_running=0
+
+	if power_use_mango_idle; then
+		power_lock_available=1
+		if mango_monitor_sleep_script >/dev/null 2>&1 && command -v mmsg >/dev/null 2>&1; then
+			power_dpms_available=1
+		fi
+		if command -v pgrep >/dev/null 2>&1 &&
+			pgrep -u "$(id -u)" -x swayidle >/dev/null 2>&1; then
+			power_lock_running=1
+		fi
+	else
+		if command -v xset >/dev/null 2>&1 && power_xset_out=$(xset q 2>/dev/null); then
+			power_dpms_available=1
+
+			power_value=$(printf '%s\n' "$power_xset_out" |
+				awk '/DPMS is/ { print $3; exit }')
+			case $power_value in
+			Enabled | enabled) power_live_dpms_enabled=1 ;;
+			Disabled | disabled) power_live_dpms_enabled=0 ;;
+			esac
+
+			power_value=$(printf '%s\n' "$power_xset_out" |
+				awk '/Standby:/ { for (i = 1; i <= NF; i++) if ($i == "Off:") { print $(i + 1); exit } }')
+			if is_uint "$power_value"; then
+				power_live_dpms_timeout=$power_value
+			fi
+
+			power_value=$(printf '%s\n' "$power_xset_out" |
+				awk '/timeout:/ { for (i = 1; i <= NF; i++) if ($i == "timeout:") { print $(i + 1); exit } }')
+			if is_uint "$power_value" && [ "$power_value" -gt 0 ]; then
+				power_live_lock_timeout=$power_value
+			fi
+		fi
+
+		if command -v light-locker >/dev/null 2>&1 &&
+			command -v gsettings >/dev/null 2>&1 &&
+			power_gsettings_value=$(gsettings get apps.light-locker lock-after-screensaver 2>/dev/null); then
+			power_lock_available=1
+			power_value=$(printf '%s\n' "$power_gsettings_value" | awk '{ print $NF }')
+			if is_uint "$power_value"; then
+				power_live_lock_after=$power_value
+			fi
+		fi
+
+		if [ "$power_dpms_available" = 1 ] && [ "$power_lock_available" = 1 ]; then
+			if [ "$power_live_lock_after" -gt 0 ] && [ "$power_live_lock_timeout" -gt 0 ]; then
+				power_live_lock_enabled=1
+			else
+				power_live_lock_enabled=0
+			fi
+		fi
+
+		if command -v pgrep >/dev/null 2>&1 &&
+			pgrep -u "$(id -u)" -x light-locker >/dev/null 2>&1; then
+			power_lock_running=1
+		fi
+	fi
+
+	printf 'dpms_available\t%s\n' "$power_dpms_available"
+	printf 'dpms_enabled\t%s\n' "$power_live_dpms_enabled"
+	printf 'dpms_timeout\t%s\n' "$power_live_dpms_timeout"
+	printf 'lock_available\t%s\n' "$power_lock_available"
+	printf 'lock_enabled\t%s\n' "$power_live_lock_enabled"
+	printf 'lock_timeout\t%s\n' "$power_live_lock_timeout"
+	printf 'lock_after\t%s\n' "$power_live_lock_after"
+	printf 'lock_running\t%s\n' "$power_lock_running"
+	printf 'config_file\t%s\n' "$power_config_file"
+}
+
+power_set_dpms() {
+	case ${1:-} in
+	on | enable | enabled | 1) power_new_enabled=1 ;;
+	off | disable | disabled | 0) power_new_enabled=0 ;;
+	*)
+		printf 'usage: %s power-dpms on|off\n' "$0" >&2
+		return 2
+		;;
+	esac
+
+	read_power_config
+	power_dpms_enabled=$power_new_enabled
+	write_power_config
+	power_apply_dpms_settings
+	notify "Display power updated" "DPMS $([ "$power_dpms_enabled" = 1 ] && printf enabled || printf disabled)"
+	printf 'power-dpms\t%s\n' "$power_dpms_enabled"
+}
+
+power_set_dpms_timeout() {
+	read_power_config
+	power_new_timeout=$(normalize_seconds "${1:-}" "$power_dpms_timeout")
+	power_dpms_enabled=1
+	power_dpms_timeout=$power_new_timeout
+	write_power_config
+	power_apply_dpms_settings
+	notify "Display power updated" "DPMS timeout ${power_dpms_timeout}s"
+	printf 'power-dpms-timeout\t%s\n' "$power_dpms_timeout"
+}
+
+power_set_lock() {
+	case ${1:-} in
+	on | enable | enabled | 1) power_new_enabled=1 ;;
+	off | disable | disabled | 0) power_new_enabled=0 ;;
+	*)
+		printf 'usage: %s power-lock on|off\n' "$0" >&2
+		return 2
+		;;
+	esac
+
+	read_power_config
+	power_lock_enabled=$power_new_enabled
+	power_lock_managed=1
+	write_power_config
+	power_apply_lock_settings
+	notify "Locking updated" "Auto lock $([ "$power_lock_enabled" = 1 ] && printf enabled || printf disabled)"
+	printf 'power-lock\t%s\n' "$power_lock_enabled"
+}
+
+power_set_lock_timeout() {
+	read_power_config
+	power_new_timeout=$(normalize_seconds "${1:-}" "$power_lock_timeout")
+	power_lock_enabled=1
+	power_lock_managed=1
+	power_lock_timeout=$power_new_timeout
+	write_power_config
+	power_apply_lock_settings
+	notify "Locking updated" "Auto lock timeout ${power_lock_timeout}s"
+	printf 'power-lock-timeout\t%s\n' "$power_lock_timeout"
+}
+
+notify() {
+	if command -v notify-send >/dev/null 2>&1; then
+		notify-send -a "mango-titus" "$@" 2>/dev/null || true
+	fi
+}
+
+# Display managers often omit ~/.local/bin for session children (qs, etc.).
+ensure_local_bin_path() {
+	local_bin=${HOME:-}/.local/bin
+	case :${PATH:-}: in
+	*:"$local_bin":*) ;;
+	*) PATH="$local_bin:${PATH:-/usr/bin:/bin}" ;;
+	esac
+	export PATH
+}
+
+ensure_local_bin_path
+
+find_terminal_helper() {
+	if [ -x "$script_dir/mango-titus-terminal" ]; then
+		printf '%s\n' "$script_dir/mango-titus-terminal"
+		return 0
+	fi
+	if [ -x "${HOME:-}/.local/bin/mango-titus-terminal" ]; then
+		printf '%s\n' "${HOME:-}/.local/bin/mango-titus-terminal"
+		return 0
+	fi
+	if command -v mango-titus-terminal >/dev/null 2>&1; then
+		command -v mango-titus-terminal
+		return 0
+	fi
+	return 1
+}
+
+launch_background() {
+	if [ "${DWM_TEST_SYNC:-0}" = 1 ]; then
+		"$@"
+		return
+	fi
+
+	if command -v setsid >/dev/null 2>&1; then
+		setsid "$@" >/dev/null 2>&1 &
+	else
+		"$@" >/dev/null 2>&1 &
+	fi
+}
+
+# Always spawn a real terminal in the background. Never fall back to a
+# foreground shell here — that freezes Quickshell's action Process (sudo/read).
+terminal_run() {
+	term=$(find_terminal_helper) || {
+		notify "Terminal required" "Install alacritty or kitty, then retry"
+		printf 'no terminal helper available\n' >&2
+		return 1
+	}
+	launch_background "$term" -e sh -c "$1"
+}
+
+health() {
+	health_helper=$script_dir/mango-titus-health
+	if [ ! -x "$health_helper" ]; then
+		health_helper=$repo_dir/scripts/helpers/mango-titus-health
+	fi
+	if [ ! -x "$health_helper" ]; then
+		health_helper=$(command -v mango-titus-health 2>/dev/null || true)
+	fi
+	if [ -z "$health_helper" ]; then
+		printf 'error\tSystem health helper\tmango-titus-health missing\n'
+		return 1
+	fi
+
+	"$health_helper" scan-user | awk -F '\t' '
+		$1 == "check" {
+			status = $3
+			if (status == "info") status = "ok"
+			printf "%s\t%s\t%s\n", status, $5, $6
+		}
+	'
+}
+
+info() {
+	os_name=unknown
+	if [ -r /etc/os-release ]; then
+		os_name=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/^"|"$/, "", $2); print $2; exit }' /etc/os-release)
+	fi
+
+	# mangowm composites in-process (scenefx); picom is unused.
+	compositor=stopped
+	if pgrep -x mango >/dev/null 2>&1; then
+		compositor='mangowm (built-in)'
+	elif pgrep -x picom >/dev/null 2>&1; then
+		compositor='picom (external)'
+	fi
+
+	audio=unavailable
+	if command -v pactl >/dev/null 2>&1; then
+		audio=$(pactl info 2>/dev/null | awk -F': ' '$1 == "Server Name" { print $2; exit }')
+		audio=${audio:-available}
+	elif command -v wpctl >/dev/null 2>&1; then
+		audio=wireplumber
+	fi
+
+	printf 'OS\t%s\n' "$os_name"
+	printf 'Kernel\t%s\n' "$(uname -sr)"
+	host=$(uname -n 2>/dev/null || true)
+	[[ -n $host ]] || host=$(hostnamectl --static 2>/dev/null || true)
+	[[ -n $host ]] || host=$(hostname 2>/dev/null || true)
+	[[ -n $host ]] || host=unknown
+	printf 'Host\t%s\n' "$host"
+	printf 'Uptime\t%s\n' "$(uptime -p 2>/dev/null || uptime 2>/dev/null || printf unknown)"
+	printf 'Terminal\t%s\n' "${TERMINAL:-mango-titus-terminal}"
+	printf 'Compositor\t%s\n' "$compositor"
+	printf 'Audio\t%s\n' "$audio"
+	printf 'Theme\t%s\n' "$(active_theme)"
+}
+
+active_theme() {
+	awk '
+		$0 ~ /^\[active\]/ { active = 1; next }
+		$0 ~ /^\[/ { active = 0 }
+		active && $1 == "theme" {
+			value = $0
+			sub(/^[^=]*=[[:space:]]*/, "", value)
+			sub(/[[:space:]]*#.*/, "", value)
+			gsub(/"/, "", value)
+			gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+			print value
+			exit
+		}
+	' "$(config_file themes.toml)"
+}
+
+theme_exists() {
+	name=$1
+	awk -v section="[theme.$name]" '$0 == section { found = 1 } END { exit found ? 0 : 1 }' "$(config_file themes.toml)"
+}
+
+themes() {
+	active=$(active_theme)
+	awk -v active="$active" '
+		/^\[theme\.[^]]+\]/ {
+			name = $0
+			sub(/^\[theme\./, "", name)
+			sub(/\]$/, "", name)
+			status = name == active ? "active" : "available"
+			printf "%s\t%s\n", status, name
+		}
+	' "$(config_file themes.toml)"
+}
+
+ensure_user_themes_file() {
+	file=$product_config_dir/themes.toml
+	if [ ! -f "$file" ]; then
+		mkdir -p "$product_config_dir"
+		cp "$repo_dir/config/themes.toml" "$file"
+	fi
+	printf '%s\n' "$file"
+}
+
+theme_set() {
+	name=$1
+	if ! theme_exists "$name"; then
+		printf 'unknown theme: %s\n' "$name" >&2
+		return 1
+	fi
+
+	file=$(ensure_user_themes_file)
+	tmp=$(mktemp "${TMPDIR:-/tmp}/dwm-theme.XXXXXX")
+	trap 'rm -f "$tmp"' EXIT INT HUP TERM
+	awk -v name="$name" '
+		$0 ~ /^\[active\]/ {
+			active = 1
+			print
+			next
+		}
+		$0 ~ /^\[/ {
+			active = 0
+		}
+		active && $1 == "theme" {
+			sub(/theme[[:space:]]*=.*/, "theme = \"" name "\"")
+			print
+			done = 1
+			next
+		}
+		{ print }
+		END {
+			if (!done) {
+				print ""
+				print "[active]"
+				print "theme = \"" name "\""
+			}
+		}
+	' "$file" >"$tmp"
+	mv "$tmp" "$file"
+	trap - EXIT INT HUP TERM
+
+	# Apply GTK/Qt/terminal/Quickshell colors (mangowm has no dwm SIGUSR1 reload)
+	apply_log=$(mktemp "${TMPDIR:-/tmp}/dwm-theme-apply.XXXXXX")
+	apply_rc=0
+	if [ -x "$mango_data/scripts/mango-titus-theme-apply" ]; then
+		"$mango_data/scripts/mango-titus-theme-apply" >"$apply_log" 2>&1 || apply_rc=$?
+	elif [ -x "$product_config_dir/scripts/mango-titus-theme-apply" ]; then
+		"$product_config_dir/scripts/mango-titus-theme-apply" >"$apply_log" 2>&1 || apply_rc=$?
+	else
+		printf 'mango-titus-theme-apply not found\n' >"$apply_log"
+		apply_rc=1
+	fi
+	if [ "$apply_rc" -ne 0 ]; then
+		# Surface apply failures instead of silently succeeding in the UI.
+		cat "$apply_log" >&2 || true
+		rm -f "$apply_log"
+		return "$apply_rc"
+	fi
+	rm -f "$apply_log"
+
+	notify "Theme changed" "$name"
+	printf 'theme\t%s\n' "$name"
+}
+
+keybinds() {
+	awk '
+		function value(line, key, pattern, result) {
+			pattern = key "=\"[^\"]*\""
+			if (match(line, pattern)) {
+				result = substr(line, RSTART + length(key) + 2, RLENGTH - length(key) - 3)
+				return result
+			}
+			return ""
+		}
+
+		/^[[:space:]]*\{/ && /desc=/ {
+			mod = value($0, "mod")
+			key = value($0, "key")
+			desc = value($0, "desc")
+			if (key == "") {
+				next
+			}
+			label = mod == "" ? key : mod "+" key
+			gsub(/SUPER/, "Super", label)
+			gsub(/SHIFT/, "Shift", label)
+			gsub(/CTRL/, "Ctrl", label)
+			gsub(/ALT/, "Alt", label)
+			gsub(/\+/, " + ", label)
+			printf "%s\t%s\n", label, desc
+		}
+	' "$(config_file hotkeys.toml)"
+}
+
+restart_picom() {
+	# mangowm embeds compositing (scenefx); no external picom
+	if command -v mmsg >/dev/null 2>&1; then
+		mmsg -d reload_config 2>/dev/null || mmsg dispatch reload_config 2>/dev/null || true
+		notify "Mango config reloaded"
+		return 0
+	fi
+	printf 'mangowm has built-in compositing (no picom)\n' >&2
+	notify "Compositor is built into mangowm"
+	return 0
+}
+
+find_mango_socket() {
+	if [ -n "${MANGO_INSTANCE_SIGNATURE:-}" ] && [ -S "${MANGO_INSTANCE_SIGNATURE}" ]; then
+		printf '%s\n' "$MANGO_INSTANCE_SIGNATURE"
+		return 0
+	fi
+	uid=$(id -u)
+	runtime=${XDG_RUNTIME_DIR:-/run/user/$uid}
+	mango_pid=$(pgrep -n -x mango 2>/dev/null || true)
+	if [ -n "$mango_pid" ] && [ -S "$runtime/mango-${mango_pid}.sock" ]; then
+		printf '%s\n' "$runtime/mango-${mango_pid}.sock"
+		return 0
+	fi
+	sock=$(ls -1t "$runtime"/mango-*.sock 2>/dev/null | head -n1 || true)
+	if [ -n "$sock" ] && [ -S "$sock" ]; then
+		printf '%s\n' "$sock"
+		return 0
+	fi
+	return 1
+}
+
+# Spawn under mangowm so the child inherits the seat graphical session.
+seat_spawn() {
+	cmd=$1
+	case $cmd in
+	*,*) return 1 ;;
+	esac
+	command -v mmsg >/dev/null 2>&1 || return 1
+	sock=$(find_mango_socket) || return 1
+	MANGO_INSTANCE_SIGNATURE=$sock mmsg dispatch "spawn_shell,$cmd" >/dev/null
+}
+
+restart_quickshell() {
+	qs_dir=$config_home/mango-titus/quickshell
+	config=$qs_dir/shell.qml
+	if [ ! -f "$config" ]; then
+		printf 'quickshell config is unavailable: %s\n' "$config" >&2
+		return 1
+	fi
+
+	if ! command -v qs >/dev/null 2>&1 && ! command -v quickshell >/dev/null 2>&1; then
+		printf 'quickshell is not installed\n' >&2
+		return 1
+	fi
+
+	qs_bin=qs
+	command -v qs >/dev/null 2>&1 || qs_bin=quickshell
+	start_cmd="$qs_bin -c $qs_dir --no-duplicate"
+
+	pkill -x qs 2>/dev/null || pkill -x quickshell 2>/dev/null || true
+	sleep 0.2
+
+	# Prefer mango spawn so qs lands in the seat session (needed for poweroff etc).
+	if seat_spawn "$start_cmd"; then
+		notify "Quickshell restarted"
+		return 0
+	fi
+
+	launch_background $qs_bin -c "$qs_dir" --no-duplicate
+	notify "Quickshell restarted"
+}
+
+reload_wallpaper() {
+	wallpaper_sh=${XDG_CONFIG_HOME:-$HOME/.config}/mango-titus/scripts/wallpaper.sh
+	if [ -x "$wallpaper_sh" ]; then
+		if "$wallpaper_sh"; then
+			notify "Wallpaper reloaded"
+			return 0
+		fi
+		return 1
+	fi
+	printf 'wallpaper helper missing: %s\n' "$wallpaper_sh" >&2
+	return 1
+}
+
+toggle_compositor() {
+	# No external compositor to toggle under mangowm
+	restart_picom
+}
+
+restart_networkmanager() {
+	if ! command -v systemctl >/dev/null 2>&1; then
+		printf 'systemctl is unavailable\n' >&2
+		notify "NetworkManager" "systemctl is unavailable"
+		return 1
+	fi
+
+	# Prefer polkit GUI auth — never block qs on a password prompt.
+	if command -v pkexec >/dev/null 2>&1; then
+		launch_background pkexec systemctl restart NetworkManager
+		notify "NetworkManager" "Restart requested (authenticate if prompted)"
+		return 0
+	fi
+
+	if terminal_run "sudo systemctl restart NetworkManager; status=\$?; printf '\\nExit %s. Press enter...\\n' \"\$status\"; read -r _"; then
+		notify "NetworkManager" "Restart requested in terminal"
+		return 0
+	fi
+
+	notify "NetworkManager" "Need pkexec or a terminal to restart"
+	return 1
+}
+
+# Full mango-oriented check (never shadows dwm's check-deps.sh on PATH).
+dependency_check() {
+	ensure_local_bin_path
+	checker=$script_dir/mango-titus-check-deps
+	if [ ! -x "$checker" ]; then
+		checker=$mango_data/scripts/mango-titus-check-deps
+	fi
+	if [ ! -x "$checker" ]; then
+		notify "Dependency check" "mango-titus-check-deps missing"
+		printf 'dependency-check\terror\tchecker missing\n'
+		return 1
+	fi
+
+	status=0
+	out=$("$checker" 2>&1) || status=$?
+	printf '%s\n' "$out" >&2
+	summary=$(printf '%s\n' "$out" | awk -F '\t' '$1 == "dependency-check" { print; exit }')
+	if [ -z "$summary" ]; then
+		summary=$(printf 'dependency-check\terror\n')
+	fi
+	printf '%s\n' "$summary"
+
+	kind=$(printf '%s\n' "$summary" | cut -f2)
+	case $kind in
+	ok)
+		notify "Dependency check" "Core tools present"
+		return 0
+		;;
+	missing)
+		missing=$(printf '%s\n' "$summary" | cut -f3-)
+		notify "Dependency check" "Missing: ${missing:-see log}"
+		return 1
+		;;
+	*)
+		notify "Dependency check" "Completed with errors"
+		return "$status"
+		;;
+	esac
+}
+
+# Never re-run install.sh from Quick Actions — that is interactive and destructive
+# from a GUI click. Point the user at a real clone + terminal instead.
+install_missing_deps() {
+	msg='Open a terminal in your mango-titus clone and run: ./install.sh'
+	clone=''
+	for candidate in \
+		"${HOME:-}/mangowm-titus/install.sh" \
+		"${HOME:-}/mango-titus/install.sh" \
+		"$repo_dir/install.sh"; do
+		if [ -x "$candidate" ]; then
+			clone=$(CDPATH= cd -- "$(dirname -- "$candidate")" && pwd)
+			break
+		fi
+	done
+
+	if [ -n "$clone" ] && term=$(find_terminal_helper); then
+		launch_background "$term" -e sh -c "cd '$clone' && printf '%s\\n' 'This will run the mango-titus installer.' 'Ctrl+C to abort, or Enter to continue...' && read -r _ && ./install.sh; printf '\\nPress enter to close...'; read -r _"
+		notify "Install Missing Deps" "Confirm in the terminal to run ./install.sh"
+		return 0
+	fi
+
+	notify "Install Missing Deps" "$msg"
+	printf '%s\n' "$msg" >&2
+	return 1
+}
+
+open_wallpapers() {
+	dir=${HOME:-}/Pictures/backgrounds
+	mkdir -p -- "$dir" 2>/dev/null || true
+
+	# Prefer a real file manager. Plain xdg-open often hits kitty-open.desktop
+	# (kitty claims inode/directory) and opens a terminal instead of an FM.
+	for fm in thunar nautilus dolphin pcmanfm nemo caja; do
+		if command -v "$fm" >/dev/null 2>&1; then
+			launch_background "$fm" "$dir"
+			return 0
+		fi
+	done
+
+	if command -v xdg-open >/dev/null 2>&1; then
+		launch_background xdg-open "$dir"
+		return 0
+	fi
+
+	printf 'no file manager or xdg-open available\n' >&2
+	notify "Wallpaper Folder" "Install thunar (or another file manager)"
+	return 1
+}
+
+gtk_settings() {
+	if command -v nwg-look >/dev/null 2>&1; then
+		launch_background nwg-look
+	else
+		printf 'nwg-look is unavailable\n' >&2
+		return 1
+	fi
+}
+
+action() {
+	case ${1:-} in
+	restart-picom) restart_picom ;;
+	restart-quickshell) restart_quickshell ;;
+	reload-wallpaper) reload_wallpaper ;;
+	toggle-compositor) toggle_compositor ;;
+	restart-networkmanager) restart_networkmanager ;;
+	dependency-check) dependency_check ;;
+	install-missing-deps) install_missing_deps ;;
+	open-wallpapers) open_wallpapers ;;
+	gtk-settings) gtk_settings ;;
+	terminal) launch_background mango-titus-terminal ;;
+	browser) launch_background mango-titus-default-apps open https:// ;;
+	*)
+		printf 'unknown action: %s\n' "${1:-}" >&2
+		return 2
+		;;
+	esac
+	printf 'action\t%s\n' "$1"
+}
+
+usage() {
+	printf 'usage: %s health|info|themes|theme-set <name>|keybinds|power-status|power-apply|power-dpms on|off|power-dpms-timeout <seconds>|power-lock on|off|power-lock-timeout <seconds>|action <name>\n' "$0" >&2
+}
+
+case ${1:-} in
+health) health ;;
+info) info ;;
+themes) themes ;;
+theme-set)
+	if [ $# -ne 2 ]; then
+		usage
+		exit 2
+	fi
+	theme_set "$2"
+	;;
+keybinds) keybinds ;;
+power-status) power_status ;;
+power-apply) power_apply ;;
+power-dpms)
+	if [ $# -ne 2 ]; then
+		usage
+		exit 2
+	fi
+	power_set_dpms "$2"
+	;;
+power-dpms-timeout)
+	if [ $# -ne 2 ]; then
+		usage
+		exit 2
+	fi
+	power_set_dpms_timeout "$2"
+	;;
+power-lock)
+	if [ $# -ne 2 ]; then
+		usage
+		exit 2
+	fi
+	power_set_lock "$2"
+	;;
+power-lock-timeout)
+	if [ $# -ne 2 ]; then
+		usage
+		exit 2
+	fi
+	power_set_lock_timeout "$2"
+	;;
+action)
+	if [ $# -ne 2 ]; then
+		usage
+		exit 2
+	fi
+	action "$2"
+	;;
+*)
+	usage
+	exit 2
+	;;
+esac

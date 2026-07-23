@@ -1,0 +1,87 @@
+#!/bin/sh
+# Power actions that must run in the seat graphical session so polkit
+# allow_active=yes applies. qs often sits outside that session (e.g. after an
+# SSH redeploy), so we prefer mango spawn_shell → systemctl.
+set -eu
+
+usage() {
+	printf 'usage: %s poweroff|reboot|suspend\n' "$(basename "$0")" >&2
+}
+
+find_mango_socket() {
+	if [ -n "${MANGO_INSTANCE_SIGNATURE:-}" ] && [ -S "${MANGO_INSTANCE_SIGNATURE}" ]; then
+		printf '%s\n' "$MANGO_INSTANCE_SIGNATURE"
+		return 0
+	fi
+
+	uid=$(id -u)
+	runtime=${XDG_RUNTIME_DIR:-/run/user/$uid}
+	mango_pid=$(pgrep -n -x mango 2>/dev/null || true)
+	if [ -n "$mango_pid" ] && [ -S "$runtime/mango-${mango_pid}.sock" ]; then
+		printf '%s\n' "$runtime/mango-${mango_pid}.sock"
+		return 0
+	fi
+
+	# Newest mango-*.sock under the runtime dir
+	sock=$(ls -1t "$runtime"/mango-*.sock 2>/dev/null | head -n1 || true)
+	if [ -n "$sock" ] && [ -S "$sock" ]; then
+		printf '%s\n' "$sock"
+		return 0
+	fi
+	return 1
+}
+
+in_seat_session() {
+	[ -n "${XDG_SEAT:-}" ] || return 1
+	case ${XDG_SESSION_TYPE:-} in
+	wayland | x11) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+# Run a shell command as a child of mangowm (inherits seat session / polkit).
+# mmsg splits dispatch args on commas — keep the command as one field.
+seat_spawn() {
+	cmd=$1
+	case $cmd in
+	*,*)
+		printf 'mango-titus-power: command must not contain commas\n' >&2
+		return 1
+		;;
+	esac
+
+	command -v mmsg >/dev/null 2>&1 || return 1
+	sock=$(find_mango_socket) || return 1
+	MANGO_INSTANCE_SIGNATURE=$sock mmsg dispatch "spawn_shell,$cmd" >/dev/null
+}
+
+run_systemctl() {
+	action=$1
+	cmd="systemctl $action"
+
+	# Already on the seat session (keybind spawn, healthy qs, etc.)
+	if in_seat_session; then
+		exec systemctl "$action"
+	fi
+
+	# qs / helpers often run under a tty/SSH session — hand off to mango.
+	if seat_spawn "$cmd"; then
+		return 0
+	fi
+
+	# Last resort: polkit GUI elevate (needs a working agent + display).
+	if command -v pkexec >/dev/null 2>&1; then
+		exec pkexec systemctl "$action"
+	fi
+
+	exec systemctl "$action"
+}
+
+case ${1:-} in
+poweroff | reboot | suspend) run_systemctl "$1" ;;
+-h | --help) usage ;;
+*)
+	usage
+	exit 2
+	;;
+esac

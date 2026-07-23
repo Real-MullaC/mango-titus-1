@@ -3,8 +3,9 @@
 
   # mango-titus
   ### dwm-titus–shaped desktop on [mangowm](https://github.com/mangowm/mango) for Wayland.
-
 </div>
+
+![mango-titus desktop](./screenshots/desktop.png)
 
 ---
 
@@ -34,7 +35,7 @@ mango-titus is namespaced so it can **live alongside dwm-titus** on the same mac
 ### Install on an Existing System
 
 ```bash
-git clone https://github.com/ChrisTitusTech/mango-titus.git
+git clone https://github.com/robojerk/mango-titus.git
 cd mango-titus
 
 ./install.sh --profile recommended
